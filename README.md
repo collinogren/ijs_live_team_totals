@@ -17,7 +17,7 @@ to build the debug version.
 
 # Using the Software
 Once you have built the program, simply run the executable.
-A new folder will appear called settings and in it will be a `settings.toml` file in this file you will find by default:
+A new folder will appear called settings and in it will be a `settings.toml` file in this file, you will find by default:
 >points_for_each_placement = [3.0, 2.0, 1.0]  
 include_60 = true  
 include_ijs = true  
