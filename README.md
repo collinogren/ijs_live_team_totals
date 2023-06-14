@@ -4,7 +4,7 @@ This software is an independent addon for U.S. Figure Skating and ISU accounting
 # Free and Open Source Software
 This software is free and open source which not only allows you, the end user, to request changes from myself, but it also allows you to fix and adjust the program to suit your needs.
 
-# Building the Software
+# Building From Source
 This software is written using the Rust programming language, a modern, fast, cross-platform, safe language.
 The Rust compiler and associated software can be found here: https://www.rust-lang.org/tools/install
 If you are unfamiliar with Rust and would like to learn more, check out the book *The Rust Programming Language*: https://doc.rust-lang.org/book/
