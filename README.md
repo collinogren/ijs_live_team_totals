@@ -50,7 +50,7 @@ The output will be saved to a file named `team_totals.txt`. Later this should be
 # TODO
 This software is a work in progress, the current goals for new features include:
 + Implement a proper grapical user interface
-+ Implement a feature to ignore certain results files (for example Compete USA events are often excluded from talleys)
++ Implement a feature to ignore certain results files (for example Compete USA events are often excluded from tallies)
 + Implement support for partnered events for IJS and 6.0
 
 # Copyright Information
