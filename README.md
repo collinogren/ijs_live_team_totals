@@ -2,9 +2,9 @@
 This software is an independent addon for U.S. Figure Skating and ISU accounting software. The purpose of this software is to provide a unified and flexible solution to calculating team points.
 
 # Free and Open Source Software
-This software is free and open source which not only allows you, the end user, to request changes from myself, but it also allows you to fix and adjust the program to suit your needs.
+This software is free and open source which not only allows you, the end user, to request changes from myself, but it also allows you to fix and adjust the program to suit your needs. I also encourage you to make pull requests so that other accountants may take advantage of your work.
 
-# Building the Software
+# Building From Source
 This software is written using the Rust programming language, a modern, fast, cross-platform, safe language.
 The Rust compiler and associated software can be found here: https://www.rust-lang.org/tools/install
 If you are unfamiliar with Rust and would like to learn more, check out the book *The Rust Programming Language*: https://doc.rust-lang.org/book/
@@ -16,8 +16,8 @@ to build the release version and
 to build the debug version.
 
 # Using the Software
-Once you have built the program, simply run the executable.
-A new folder will appear called settings and in it will be a `settings.toml` file in this file you will find by default:
+The program may either be built from source or downloaded from the [releases link](https://github.com/collinogren/ijs_live_team_totals/releases) on this page.
+A new folder will appear called settings and in it will be a `settings.toml` file in this file, you will find by default:
 >points_for_each_placement = [3.0, 2.0, 1.0]  
 include_60 = true  
 include_ijs = true  
@@ -50,11 +50,11 @@ The output will be saved to a file named `team_totals.txt`. Later this should be
 # TODO
 This software is a work in progress, the current goals for new features include:
 + Implement a proper grapical user interface
-+ Implement a feature to ignore certain results files (for example Compete USA events are often excluded from talleys)
++ Implement a feature to ignore certain results files (for example Compete USA events are often excluded from tallies)
 + Implement support for partnered events for IJS and 6.0
 
 # Copyright Information
-This free and open source software is published under the MIT License
+This free and open source software is published under the MIT License:
 
 Copyright (c) 2023 Collin Ogren
 
