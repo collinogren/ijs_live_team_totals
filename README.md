@@ -2,7 +2,7 @@
 This software is an independent addon for U.S. Figure Skating and ISU accounting software. The purpose of this software is to provide a unified and flexible solution to calculating team points.
 
 # Free and Open Source Software
-This software is free and open source which not only allows you, the end user, to request changes from myself, but it also allows you to fix and adjust the program to suit your needs. I also encourage you to make a pull request so that other accountants may take advantage of your work.
+This software is free and open source which not only allows you, the end user, to request changes from myself, but it also allows you to fix and adjust the program to suit your needs. I also encourage you to make pull requests so that other accountants may take advantage of your work.
 
 # Building From Source
 This software is written using the Rust programming language, a modern, fast, cross-platform, safe language.
