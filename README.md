@@ -54,7 +54,7 @@ This software is a work in progress, the current goals for new features include:
 + Implement support for partnered events for IJS and 6.0
 
 # Copyright Information
-This free and open source software is published under the MIT License
+This free and open source software is published under the MIT License:
 
 Copyright (c) 2023 Collin Ogren
 
