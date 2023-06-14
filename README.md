@@ -1,4 +1,4 @@
-# ijs_live_team_totals
+# IJS Live Team Totals
 This software is an independent addon for U.S. Figure Skating and ISU accounting software. The purpose of this software is to provide a unified and flexible solution to calculating team points.
 
 # Free and Open Source Software
