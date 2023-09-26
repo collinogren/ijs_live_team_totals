@@ -33,6 +33,12 @@ mod settings;
 #[path = "ui/terminal_ui.rs"]
 mod terminal_ui;
 
+#[path = "excel/xlsx_writer.rs"]
+mod xlsx_writer;
+
+#[path = "html_utilities/results_sorter.rs"]
+mod results_sorter;
+
 fn main() {
     let settings = Settings::read_settings();
     let path = main_menu(&settings);

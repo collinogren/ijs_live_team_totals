@@ -27,6 +27,8 @@ use scraper::selector::CssLocalName;
 use stringmetrics::jaccard;
 use crate::parser::ScoringSystem::{IJS, SixO};
 use crate::settings::Settings;
+use crate::results_sorter;
+use crate::xlsx_writer;
 
 pub fn parse_results(path: String, settings: Settings) {
     let dir = match fs::read_dir(path.clone()) {
@@ -69,15 +71,22 @@ pub fn parse_results(path: String, settings: Settings) {
     println!("Retrieved {} IJS results and {} 6.0 results.", results_ijs.len(), results_60.len());
     results_ijs.extend(results_60);
 
-    let results = sum_results(results_ijs, settings.clone());
+    let mut results = sum_results(results_ijs, settings.clone());
+
+    results_sorter::sort_results(&mut results);
+
+    xlsx_writer::create_xlsx(&results);
 
     let mut team_totals = vec![];
     for result in results {
-        team_totals.push(format!("{}: IJS: {}, 6.0: {}, Total: {}", result.club, result.points_ijs, result.points_60, result.calc_total()));
+        team_totals.push(format!("{}\t{}\t{}", result.club, result.points_ijs, result.points_60));
     }
 
     fs::write("./team_totals.txt", team_totals.join("\n")).unwrap();
+
 }
+
+
 
 pub enum ScoringSystem {
     IJS,
@@ -251,9 +260,9 @@ pub fn parser_60(files_60: Vec<String>, _settings: Settings) -> Vec<ResultSet> {
 
 #[derive(Clone)]
 pub struct ClubPoints {
-    club: String,
-    points_ijs: f64,
-    points_60: f64,
+    pub(crate) club: String,
+    pub(crate) points_ijs: f64,
+    pub(crate) points_60: f64,
 }
 
 impl ClubPoints {
