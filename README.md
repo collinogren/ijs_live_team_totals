@@ -21,7 +21,7 @@ After running the program, a new folder will appear called settings and in it wi
 >points_for_each_placement = [3.0, 2.0, 1.0]  
 include_60 = true  
 include_ijs = true  
-attempt_automatic_60_club_name_recombination_inop = false  
+attempt_automatic_60_club_name_recombination = false  
 use_event_name_for_results_path = true  
 isu_calc_base_directory = "C:/ISUCalcFS/"  
 html_relative_directory = "/IJScompanion_html_winnercomm"
@@ -33,7 +33,7 @@ More information on TOML can be found here: https://toml.io/en/
 `points_for_each_placement` is an array of points allocated for each finishing position in the competition. The first number being for first place, the second for second place, and so on.  
 `include_60` is a boolean value that dictates whether 6.0 results should be included in the calculation or not.  
 `include_ijs` is a boolean value that dictates whether IJS results should be included in the calculation or not.  
-`attempt_automatic_60_club_name_recombination_inop` is a boolean value that dictates whether the program should combine the (potentially) truncated 6.0 club name with the full length name found on IJS results. This value is currently inoperational.  
+`attempt_automatic_60_club_name_recombination` is a boolean value that dictates whether the program should combine the (potentially) truncated 6.0 club name with the full length name found on IJS results.
 `use_event_name_for_results_path` is a boolean value that dictates whether the program should ask for a competition name or a full path to the competition folder.  
 `isu_calc_base_directory` is a String value that contains the path to ISUCalcFS. It is a companion value to `use_event_name_for_results_path = true`  
 `html_relative_directory` is a String value that contains the path to the HTML results files relative to the competition directory.
@@ -49,7 +49,6 @@ The output will be saved to a file named `team_totals.xlsx` and `team_totals.txt
 
 # TODO
 This software is a work in progress, the current goals for new features include:
-+ Implement a feature to combine club's results. This is especially useful because 6.0 club names are often truncated and thus do not combine correctly with IJS results.
 + Implement a proper grapical user interface
 + Implement a feature to ignore certain results files (for example Compete USA events are often excluded from tallies)
 + Implement support for partnered events for IJS and 6.0
