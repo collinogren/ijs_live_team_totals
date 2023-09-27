@@ -21,7 +21,7 @@ After running the program, a new folder will appear called settings and in it wi
 >points_for_each_placement = [3.0, 2.0, 1.0]  
 include_60 = true  
 include_ijs = true  
-attempt_automatic_60_club_name_recombination_inop = false  
+attempt_automatic_60_club_name_recombination = false  
 use_event_name_for_results_path = true  
 isu_calc_base_directory = "C:/ISUCalcFS/"  
 html_relative_directory = "/IJScompanion_html_winnercomm"
