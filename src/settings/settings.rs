@@ -30,10 +30,18 @@ pub struct Settings {
     pub(crate) points_for_each_placement: Vec<f64>,
     pub(crate) include_60: bool,
     pub(crate) include_ijs: bool,
+    pub(crate) generate_xlsx: bool,
+    pub(crate) generate_txt: bool,
     pub(crate) attempt_automatic_60_club_name_recombination: bool,
     pub(crate) use_event_name_for_results_path: bool, //If this is set to true, then the program will find the results based on event name rather than absolute path.
     pub(crate) isu_calc_base_directory: String,
     pub(crate) html_relative_directory: String,
+    pub(crate) output_directory: String,
+    pub(crate) xlsx_file_name: String,
+    pub(crate) txt_file_name: String,
+    pub(crate) xlsx_header_cell_values: Vec<String>,
+    pub(crate) xlsx_column_widths: Vec<i32>,
+    pub(crate) xlsx_font_size: u32,
 }
 
 impl Default for Settings {
@@ -42,33 +50,58 @@ impl Default for Settings {
             points_for_each_placement: vec![3.0, 2.0, 1.0],
             include_60: true,
             include_ijs: true,
-            attempt_automatic_60_club_name_recombination: false,
+            generate_xlsx: true,
+            generate_txt: false,
+            attempt_automatic_60_club_name_recombination: true,
             use_event_name_for_results_path: true,
             isu_calc_base_directory: String::from("C:/ISUCalcFS/"),
             html_relative_directory: String::from("/IJScompanion_html_winnercomm"),
+            output_directory: String::from("./"),
+            xlsx_file_name: String::from("team_totals.xlsx"),
+            txt_file_name: String::from("team_totals.txt"),
+            xlsx_header_cell_values: vec![String::from("Rank"), String::from("Club"), String::from("IJS"), String::from("6.0"), String::from("Total")],
+            xlsx_column_widths: vec![15, 100, 11, 11, 15],
+            xlsx_font_size: 32,
         }
     }
 }
 
 impl Settings {
     #[allow(unused)]
-    pub fn new(points_for_each_placement: Vec<f64>,
-               include_60: bool,
-               include_ijs: bool,
-               participant_quantity_exclusion_point: u64,
-               attempt_automatic_60_club_name_recombination: bool,
-               use_event_name_for_results_path: bool,
-               isu_calc_base_directory: String,
-               html_relative_directory: String,
+    pub fn new(
+        points_for_each_placement: Vec<f64>,
+        include_60: bool,
+        include_ijs: bool,
+        generate_xlsx: bool,
+        generate_txt: bool,
+        participant_quantity_exclusion_point: u64,
+        attempt_automatic_60_club_name_recombination: bool,
+        use_event_name_for_results_path: bool,
+        isu_calc_base_directory: String,
+        html_relative_directory: String,
+        output_directory: String,
+        xlsx_file_name: String,
+        txt_file_name: String,
+        xlsx_header_cell_values: Vec<String>,
+        xlsx_column_widths: Vec<i32>,
+        xlsx_font_size: u32,
     ) -> Self {
         Settings {
             points_for_each_placement,
             include_60,
             include_ijs,
+            generate_xlsx,
+            generate_txt,
             attempt_automatic_60_club_name_recombination,
             use_event_name_for_results_path,
             isu_calc_base_directory,
             html_relative_directory,
+            output_directory,
+            xlsx_file_name,
+            txt_file_name,
+            xlsx_header_cell_values,
+            xlsx_column_widths,
+            xlsx_font_size,
         }
     }
 
@@ -108,5 +141,13 @@ impl Settings {
         };
 
         settings
+    }
+
+    pub fn xlsx_path(&self) -> String {
+        self.output_directory.clone() + "/" + self.xlsx_file_name.as_str()
+    }
+
+    pub fn txt_path(&self) -> String {
+        self.output_directory.clone() + "/" + self.txt_file_name.as_str()
     }
 }

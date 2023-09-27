@@ -81,14 +81,18 @@ pub fn parse_results(path: String, settings: Settings) {
 
     results_sorter::sort_results(&mut results);
 
-    xlsx_writer::create_xlsx(&results);
+    if settings.generate_xlsx {
+        xlsx_writer::create_xlsx(&results, settings.clone());
+    }
 
     let mut team_totals = vec![];
     for result in results {
         team_totals.push(format!("{}\t{}\t{}", result.club, result.points_ijs, result.points_60));
     }
 
-    fs::write("./team_totals.txt", team_totals.join("\n")).unwrap();
+    if settings.generate_txt {
+        fs::write(settings.txt_path(), team_totals.join("\n")).unwrap();
+    }
 
 }
 

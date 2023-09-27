@@ -20,31 +20,37 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+use std::path::Path;
 use rust_xlsxwriter;
-use rust_xlsxwriter::{Format, FormatAlign, Formula, Workbook};
+use rust_xlsxwriter::{ColNum, Format, FormatAlign, Formula, Workbook};
 use crate::parser::ClubPoints;
+use crate::settings::Settings;
 
-pub fn create_xlsx(club_points: &Vec<ClubPoints>) {
-
+pub fn create_xlsx(club_points: &Vec<ClubPoints>, settings: Settings) {
     let mut workbook = Workbook::new();
 
     let worksheet = workbook.add_worksheet();
 
     worksheet.set_print_gridlines(true);
-    worksheet.set_column_width(0, 15).expect("Could not set column 0 to specified width");
-    worksheet.set_column_width(1, 100).expect("Could not set column 1 to specified width");
-    worksheet.set_column_width(2, 11).expect("Could not set column 2 to specified width");
-    worksheet.set_column_width(3, 11).expect("Could not set column 3 to specified width");
-    worksheet.set_column_width(4, 15).expect("Could not set column 4 to specified width");
+    for (column, width) in settings.xlsx_column_widths.iter().enumerate() {
+        if *width > 0 { // Use negative value to not set the width.
+            worksheet
+                .set_column_width(column as ColNum, *width)
+                .expect(
+                    format!(
+                        "Could not set column {} to specified width of {}", column, width
+                    ).as_str());
+        }
+    }
 
-    let text_format = Format::new().set_font_size(32).set_align(FormatAlign::Center);
+    let text_format = Format::new().set_font_size(settings.xlsx_font_size).set_align(FormatAlign::Center);
 
-    worksheet.write_with_format(0, 0, "Rank", &text_format).expect("Failed to write \"Rank\" to worksheet at (0, 0)");
-    worksheet.write_with_format(0, 1, "Club", &text_format).expect("Failed to write \"Club\" to worksheet at (0, 1)");
-    worksheet.write_with_format(0, 2, "IJS", &text_format).expect("Failed to write \"IJS\" to worksheet at (0, 2)");
-    worksheet.write_with_format(0, 3, "6.0", &text_format).expect("Failed to write \"6.0\" to worksheet at (0, 3)");
-    worksheet.write_with_format(0, 4, "Total", &text_format).expect("Failed to write \"Total\" to worksheet at (0, 4)");
-
+    for (column, value) in settings.xlsx_header_cell_values.iter().enumerate() {
+        worksheet
+            .write_with_format(0, column as ColNum, value.as_str(), &text_format)
+            .expect(format!("Failed to write \"{}\" to worksheet at (0, {})", value, column)
+                .as_str());
+    }
 
     for (i, result) in club_points.iter().enumerate() {
         worksheet.write_with_format(i as u32 + 1, 0, i as u32 + 1, &text_format).expect("Failed to write the rank");
@@ -54,5 +60,26 @@ pub fn create_xlsx(club_points: &Vec<ClubPoints>) {
         worksheet.write_with_format(i as u32 + 1, 4, Formula::new(format!("=SUM(C{}:D{})", i as u32 + 2, i as u32 + 2).as_str()), &text_format).expect(format!("Failed to write total for {}", result.club).as_str());
     }
 
-    workbook.save("./team_totals.xlsx").expect("Failed to write xlsx file");
+    let path = settings.xlsx_path();
+
+    for i in 0..i32::MAX {
+        let modified_path = if i != 0 {
+            path.clone().replace(".xlsx", format!("({}).xlsx", i).as_str())
+        } else {
+            path.clone()
+        };
+
+        if Path::new(modified_path.as_str()).exists() {
+            continue;
+        }
+
+        match workbook.save(&modified_path) {
+            Ok(_) => {
+                break;
+            }
+            Err(_) => {
+                continue;
+            }
+        }
+    }
 }
