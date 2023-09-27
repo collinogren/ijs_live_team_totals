@@ -33,7 +33,7 @@ More information on TOML can be found here: https://toml.io/en/
 `points_for_each_placement` is an array of points allocated for each finishing position in the competition. The first number being for first place, the second for second place, and so on.  
 `include_60` is a boolean value that dictates whether 6.0 results should be included in the calculation or not.  
 `include_ijs` is a boolean value that dictates whether IJS results should be included in the calculation or not.  
-`attempt_automatic_60_club_name_recombination_inop` is a boolean value that dictates whether the program should combine the (potentially) truncated 6.0 club name with the full length name found on IJS results. This value is currently inoperational.  
+`attempt_automatic_60_club_name_recombination` is a boolean value that dictates whether the program should combine the (potentially) truncated 6.0 club name with the full length name found on IJS results.
 `use_event_name_for_results_path` is a boolean value that dictates whether the program should ask for a competition name or a full path to the competition folder.  
 `isu_calc_base_directory` is a String value that contains the path to ISUCalcFS. It is a companion value to `use_event_name_for_results_path = true`  
 `html_relative_directory` is a String value that contains the path to the HTML results files relative to the competition directory.
