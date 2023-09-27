@@ -49,7 +49,6 @@ The output will be saved to a file named `team_totals.xlsx` and `team_totals.txt
 
 # TODO
 This software is a work in progress, the current goals for new features include:
-+ Implement a feature to combine club's results. This is especially useful because 6.0 club names are often truncated and thus do not combine correctly with IJS results.
 + Implement a proper grapical user interface
 + Implement a feature to ignore certain results files (for example Compete USA events are often excluded from tallies)
 + Implement support for partnered events for IJS and 6.0
