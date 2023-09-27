@@ -24,7 +24,6 @@ use std::fs;
 
 use scraper::{CaseSensitivity, Element, ElementRef, Html, Selector};
 use scraper::selector::CssLocalName;
-use stringmetrics::jaccard;
 use crate::parser::ScoringSystem::{IJS, SixO};
 use crate::settings::Settings;
 use crate::results_sorter;
@@ -70,8 +69,15 @@ pub fn parse_results(path: String, settings: Settings) {
     let results_60 = parser_60(files_60, settings.clone());
     println!("Retrieved {} IJS results and {} 6.0 results.", results_ijs.len(), results_60.len());
     results_ijs.extend(results_60);
+    let mut combined_raw_results = results_ijs;
 
-    let mut results = sum_results(results_ijs, settings.clone());
+    clean_club_names(&mut combined_raw_results);
+
+    let mut results = sum_results(combined_raw_results, settings.clone());
+
+    if settings.attempt_automatic_60_club_name_recombination {
+        results = auto_club_combiner(results);
+    }
 
     results_sorter::sort_results(&mut results);
 
@@ -86,7 +92,36 @@ pub fn parse_results(path: String, settings: Settings) {
 
 }
 
+const HTML_CHARACTER_ENTITIES: [(&'static str, &'static str); 12] = [
+    ("&nbsp;", " "),
+    ("&lt;", "<"),
+    ("&gt;", ">"),
+    ("&amp;", "&"),
+    ("&quot;", "\""),
+    ("&apos;", "\'"),
+    ("&cent;", "¢"),
+    ("&pound;", "£"),
+    ("&yen;", "¥"),
+    ("&euro;", "€"),
+    ("&copy;", "©"),
+    ("&reg;", "®")
+];
 
+fn clean_club_names(result_sets: &mut Vec<ResultSet>) {
+    for result_set in result_sets {
+        let name = match &result_set.club {
+            Some(name) => {name}
+            None => { continue }
+        };
+
+        let mut temp = name.clone();
+        for character_entities in HTML_CHARACTER_ENTITIES {
+            temp = temp.replace(character_entities.0, character_entities.1);
+        }
+
+        result_set.club = Some(temp);
+    }
+}
 
 pub enum ScoringSystem {
     IJS,
@@ -128,7 +163,8 @@ pub fn parser_ijs(ijs_events: Vec<String>, _settings: Settings) -> Vec<ResultSet
                     .nth(1)
                     .unwrap()
                     .clone()
-                    .split("</td>").nth(0)
+                    .split("</td>")
+                    .nth(0)
                     .unwrap()
                     .clone()
                 ).parse() {
@@ -346,22 +382,29 @@ pub fn auto_club_combiner(mut club_points: Vec<ClubPoints>) -> Vec<ClubPoints> {
         ret_club_points.push(club.clone());
     }
 
-    for mut club in &mut ret_club_points {
-        for broken_club in &broken_60_club_names {
+    let mut unicorn_clubs = vec![];
+
+    'outer: for broken_club in &broken_60_club_names {
+        for mut club in &mut ret_club_points {
             let mut limited_club = club.club.clone();
             if club.club.len() > 21 {
                 let mut limited_club = limited_club.as_bytes();
                 let mut limited_club = limited_club[0..21].to_vec();
                 let mut limited_club = String::from_utf8(limited_club).unwrap();
             }
-            let similarity = jaccard(limited_club.chars(), broken_club.club.clone().chars());
 
-            if similarity >= 0.66 {
+            if limited_club.starts_with(&broken_club.club.clone()) {
                 club.points_ijs += broken_club.points_ijs;
                 club.points_60 += broken_club.points_60;
+                continue 'outer;
             }
         }
+
+        let mut broken_club_copy = broken_club.clone();
+        broken_club_copy.club = broken_club_copy.club + "...";
+        unicorn_clubs.push(broken_club_copy);
     }
 
+    ret_club_points.extend(unicorn_clubs);
     ret_club_points
 }
