@@ -45,7 +45,7 @@ Note that unlike typical Windows software, the forward slash `/` is used instead
 2. `/` is the standard for non-Windows operating systems and for URLs. The Windows convention should be treated as an abnormality and not as the standard.
 3. The standard Rust library feature `std::path::Path` automatically converts `/` into `\` as required by the operating system.
 
-The output will be saved to a file named `team_totals.xlsx` and `team_totals.txt`.
+The output will be saved to a file named `team_totals.xlsx` and / or `team_totals.txt` depending the settings file configuration.
 
 # TODO
 This software is a work in progress, the current goals for new features include:
