@@ -20,11 +20,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::time::Instant;
+#![windows_subsystem = "windows"]
+
 use iced::Application;
 use crate::gui::TeamTotalsGui;
-use crate::settings::Settings;
-use crate::terminal_ui::main_menu;
 
 #[path = "html_utilities/parser.rs"]
 mod parser;
@@ -45,14 +44,6 @@ mod results_sorter;
 mod gui;
 
 fn main() -> Result<(), iced::Error> {
-    //let settings = Settings::read_settings();
-    //let path = main_menu(&settings);
-
-    //let directory = String::from(path + &settings.html_relative_directory);
-
-
-
-
     TeamTotalsGui::run(iced::Settings::default())
 
 }
