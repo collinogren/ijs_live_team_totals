@@ -2,14 +2,20 @@ use std::io::{ErrorKind};
 use std::path::Path;
 use std::time::Instant;
 use iced::{Element, Sandbox, Theme};
-use iced::widget::{Button, Checkbox, Container, horizontal_rule, horizontal_space, row, column, text_input, vertical_space, vertical_rule};
+use iced::alignment::Vertical;
+use iced::widget::{Button, Checkbox, Container, horizontal_space, row, column, text_input, vertical_space, vertical_rule, text, Scrollable};
+use crate::gui::TeamTotalsMessage::{HTMLRelativeDirectory, ISUCalcBaseDirectory, OutputDirectory, TXTFileName, XLSXFileName, XLSXFontSize};
 use crate::parser;
+use crate::parser::State;
 use crate::settings::Settings;
 
 pub struct TeamTotalsGui {
     competition: String,
     settings: Settings,
+    status: String,
     theme: Theme,
+
+    font_size: String,
 }
 
 #[derive(Debug, Clone)]
@@ -22,6 +28,12 @@ pub enum TeamTotalsMessage {
     UseEventNameForResultsPath(bool),
     GenerateXLSX(bool),
     GenerateTXT(bool),
+    XLSXFontSize(String),
+    ISUCalcBaseDirectory(String),
+    HTMLRelativeDirectory(String),
+    XLSXFileName(String),
+    TXTFileName(String),
+    OutputDirectory(String),
 }
 
 fn get_directory(input: String, settings: &Settings) -> Result<String, ErrorKind> {
@@ -57,17 +69,22 @@ fn get_directory(input: String, settings: &Settings) -> Result<String, ErrorKind
     }
 }
 
-fn calculate(competition: String, settings: Settings) {
+fn calculate(competition: String, settings: Settings) -> String {
     let path = match get_directory(competition, &settings) {
         Ok(path) => path,
-        Err(_) => return, // Should send signal to the user that no path is found.
+        Err(_) => return String::from("No competition found."), // Should send signal to the user that no path is found.
     };
 
     let elapsed = Instant::now();
 
-    parser::parse_results(path, settings);
+    let (output, state) = parser::parse_results(path, settings);
 
-    println!("Calculation finished in {} milliseconds", elapsed.elapsed().as_millis());
+    let time_past = elapsed.elapsed().as_millis();
+
+    match state {
+        State::Ok => format!("{}\nCalculation finished in {} milliseconds.", output, time_past),
+        State::Error => output
+    }
 }
 
 impl Sandbox for TeamTotalsGui {
@@ -77,8 +94,10 @@ impl Sandbox for TeamTotalsGui {
         let settings = Settings::read();
         TeamTotalsGui {
             competition: String::new(),
-            settings,
+            settings: settings.clone(),
+            status: String::new(),
             theme: Theme::Dark,
+            font_size: settings.xlsx_font_size.to_string(),
         }
     }
 
@@ -90,7 +109,7 @@ impl Sandbox for TeamTotalsGui {
         let mut settings_changed = false;
         match message {
             TeamTotalsMessage::Input(input) => self.competition = input,
-            TeamTotalsMessage::Send => { calculate(self.competition.clone(), self.settings.clone()) }
+            TeamTotalsMessage::Send => { self.status = calculate(self.competition.clone(), self.settings.clone()) }
             TeamTotalsMessage::Include60(include_60) => {
                 self.settings.include_60 = include_60;
                 settings_changed = true;
@@ -115,6 +134,36 @@ impl Sandbox for TeamTotalsGui {
                 self.settings.generate_txt = generate_txt;
                 settings_changed = true;
             }
+            XLSXFontSize(font_size) => {
+                match font_size.parse::<u32>() {
+                    Ok(value) => {
+                        self.font_size = font_size;
+                        self.settings.xlsx_font_size = value;
+                        settings_changed = true;
+                    }
+                    Err(_) => {}
+                }
+            }
+            ISUCalcBaseDirectory(isu_calc_base_directory) => {
+                self.settings.isu_calc_base_directory = isu_calc_base_directory;
+                settings_changed = true;
+            }
+            HTMLRelativeDirectory(html_relative_directory) => {
+                self.settings.html_relative_directory = html_relative_directory;
+                settings_changed = true;
+            }
+            XLSXFileName(xlsx_file_name) => {
+                self.settings.xlsx_file_name = xlsx_file_name;
+                settings_changed = true;
+            }
+            TXTFileName(txt_file_name) => {
+                self.settings.txt_file_name = txt_file_name;
+                settings_changed = true;
+            }
+            OutputDirectory(output_directory) => {
+                self.settings.output_directory = output_directory;
+                settings_changed = true;
+            }
         }
 
         if settings_changed {
@@ -131,13 +180,12 @@ impl Sandbox for TeamTotalsGui {
 
         let calculate_button = Button::new("Calculate Team Totals").on_press(TeamTotalsMessage::Send).width(200);
 
-
-        //let column1 = Column::new().push(competition_input).push(vertical_space(10)).push(calculate_button).padding(10);
+        let calculate_button_row = row![calculate_button, horizontal_space(10), text(&self.status)];
         let column1 = column![
             competition_input,
             vertical_space(10),
-            calculate_button
-        ].padding(10);
+            calculate_button_row,
+        ].padding(10).width(iced::Length::FillPortion(5));
 
         let include_60_checkbox = Checkbox::new("Include 6.0", self.settings.include_60, TeamTotalsMessage::Include60);
         let include_ijs_checkbox = Checkbox::new("Include IJS", self.settings.include_ijs, TeamTotalsMessage::IncludeIJS);
@@ -145,6 +193,24 @@ impl Sandbox for TeamTotalsGui {
         let generate_txt_checkbox = Checkbox::new("Generate .txt file", self.settings.generate_txt, TeamTotalsMessage::GenerateTXT);
         let attempt_60_club_correction_checkbox = Checkbox::new("Attempt 6.0 Club Correction", self.settings.attempt_automatic_60_club_name_recombination, TeamTotalsMessage::Attempt60ClubCorrection);
         let use_event_name_checkbox = Checkbox::new("Use Event Name For Results Path", self.settings.use_event_name_for_results_path, TeamTotalsMessage::UseEventNameForResultsPath);
+
+        let font_size = text_input("", &self.font_size).on_input(XLSXFontSize);
+        let font_size_column = column![text("Font Size"), font_size];
+
+        let isu_calc_base_directory = text_input("", &self.settings.isu_calc_base_directory).on_input(ISUCalcBaseDirectory);
+        let isu_calc_base_directory_column = column![text("ISUCalcFS Base Directory"), vertical_space(1), isu_calc_base_directory];
+
+        let html_relative_directory = text_input("", &self.settings.html_relative_directory).on_input(HTMLRelativeDirectory);
+        let html_relative_directory_column = column![text("HTML Relative Directory"), vertical_space(1), html_relative_directory];
+
+        let output_directory = text_input("", &self.settings.output_directory).on_input(OutputDirectory);
+        let output_directory_column = column![text("Output Directory"), vertical_space(1), output_directory];
+
+        let xlsx_file_name = text_input("", &self.settings.xlsx_file_name).on_input(XLSXFileName);
+        let xlsx_file_name_column = column![text("Excel File Name"), vertical_space(1), xlsx_file_name];
+
+        let txt_file_name = text_input("", &self.settings.txt_file_name).on_input(TXTFileName);
+        let txt_file_name_column = column![text("Plain Text File Name"), vertical_space(1), txt_file_name];
 
         let column2 = column!
         [
@@ -160,19 +226,33 @@ impl Sandbox for TeamTotalsGui {
             vertical_space(10),
             use_event_name_checkbox,
             vertical_space(10),
-            horizontal_rule(1),
-        ].padding(10).width(250);
+            font_size_column,
+            vertical_space(10),
+            isu_calc_base_directory_column,
+            vertical_space(10),
+            html_relative_directory_column,
+            vertical_space(10),
+            output_directory_column,
+            vertical_space(10),
+            xlsx_file_name_column,
+            vertical_space(10),
+            txt_file_name_column,
+
+        ].padding(10);
+
+        let scroll_pane = Scrollable::new(column2).width(iced::Length::FillPortion(2));
 
         let row = row!
         [
-            column2,
+            scroll_pane,
             horizontal_space(5),
             vertical_rule(1),
             horizontal_space(5),
             column1
-        ];
+        ].height(iced::Length::Fill);
 
-        Container::new(row).center_x().center_y().width(iced::Length::Fill).height(iced::Length::Fill).into()
+
+        Container::new(row).center_x().align_y(Vertical::Top).width(iced::Length::Fill).height(iced::Length::Fill).into()
     }
 
     fn theme(&self) -> Theme {

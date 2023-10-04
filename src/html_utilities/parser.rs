@@ -29,7 +29,12 @@ use crate::settings::Settings;
 use crate::results_sorter;
 use crate::xlsx_writer;
 
-pub fn parse_results(path: String, settings: Settings) {
+pub enum State {
+    Ok,
+    Error,
+}
+
+pub fn parse_results(path: String, settings: Settings) -> (String, State) {
     let dir = match fs::read_dir(path.clone()) {
         Ok(e) => e,
         Err(err) => panic!("{} ({})", err, path),
@@ -41,8 +46,6 @@ pub fn parse_results(path: String, settings: Settings) {
 
     let mut files_60 = vec![];
     let mut files_ijs = vec![];
-
-    println!("Finding results...");
 
     //Get all files for 6.0 and IJS separately.
     for file in files {
@@ -63,17 +66,14 @@ pub fn parse_results(path: String, settings: Settings) {
     files_60.sort();
     files_ijs.sort();
 
-    println!("Found results for {} events", files_60.len() + files_ijs.len());
-
     let mut results_ijs = parser_ijs(files_ijs, settings.clone());
     let results_60 = parser_60(files_60, settings.clone());
-    println!("Retrieved {} IJS results and {} 6.0 results.", results_ijs.len(), results_60.len());
+    let number_results_60_found = format!("Retrieved {} IJS results and {} 6.0 results.", results_ijs.len(), results_60.len());
     results_ijs.extend(results_60);
     let mut combined_raw_results = results_ijs;
 
     if combined_raw_results.len() == 0 {
-        println!("A competition exists, but there are no results at this time.");
-        return
+        return (format!("The specified competition exists, but there are no results at this time."), State::Error);
     }
 
     clean_club_names(&mut combined_raw_results);
@@ -99,6 +99,7 @@ pub fn parse_results(path: String, settings: Settings) {
         fs::write(settings.txt_path(), team_totals.join("\n")).unwrap();
     }
 
+    (number_results_60_found, State::Ok)
 }
 
 const HTML_CHARACTER_ENTITIES: [(&'static str, &'static str); 12] = [

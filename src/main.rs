@@ -44,6 +44,8 @@ mod results_sorter;
 mod gui;
 
 fn main() -> Result<(), iced::Error> {
-    TeamTotalsGui::run(iced::Settings::default())
+    let mut settings = iced::Settings::default();
+    settings.window.size = (1000, 800);
+    TeamTotalsGui::run(settings)
 
 }
