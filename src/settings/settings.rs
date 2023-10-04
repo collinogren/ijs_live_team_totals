@@ -23,6 +23,9 @@ SOFTWARE.
 use std::fs;
 use std::path::Path;
 use serde_derive::{Deserialize, Serialize};
+use toml::ser::Error;
+
+pub const SETTINGS_PATH: &'static str = "./settings/settings.toml";
 
 #[derive(Clone)]
 #[derive(Serialize, Deserialize)]
@@ -105,9 +108,8 @@ impl Settings {
         }
     }
 
-    pub fn read_settings() -> Self {
-        let settings_path = Path::new("./settings/settings.toml");
-        if !settings_path.exists() {
+    pub fn read() -> Self {
+        if !Path::new(SETTINGS_PATH).exists() {
             match fs::create_dir("./settings") {
                 Ok(_) => {}
                 Err(err) => eprintln!("Failed to create settings directory: {}", err),
@@ -119,12 +121,12 @@ impl Settings {
                     format!("Failed to serialize default settings.toml file: {}", err)
                 }
             };
-            match fs::write(settings_path, toml) {
+            match fs::write(SETTINGS_PATH, toml) {
                 Ok(_) => {}
                 Err(err) => eprintln!("Failed to write to settings.toml file: {}", err),
             }
         }
-        let contents = match fs::read_to_string("./settings/settings.toml") {
+        let contents = match fs::read_to_string(SETTINGS_PATH) {
             Ok(v) => v,
             Err(err) => {
                 eprintln!("Failed to read settings file: {}\nUsing default values.", err);
@@ -141,6 +143,25 @@ impl Settings {
         };
 
         settings
+    }
+
+    pub fn write(&self) {
+        let toml = match toml::to_string(self) {
+            Ok(toml) => { toml }
+            Err(err) => {
+                eprintln!("Failed to serialize settings: {}", err);
+                return
+            }
+        };
+        
+        match fs::write(SETTINGS_PATH, toml) {
+            Ok(_) => {
+                println!("Successfully wrote to settings.toml")
+            }
+            Err(err) => {
+                eprintln!("Failed to write to settings.toml: {}", err)
+            }
+        }
     }
 
     pub fn xlsx_path(&self) -> String {

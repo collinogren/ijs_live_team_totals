@@ -21,6 +21,8 @@ SOFTWARE.
 */
 
 use std::time::Instant;
+use iced::Application;
+use crate::gui::TeamTotalsGui;
 use crate::settings::Settings;
 use crate::terminal_ui::main_menu;
 
@@ -39,13 +41,18 @@ mod xlsx_writer;
 #[path = "html_utilities/results_sorter.rs"]
 mod results_sorter;
 
-fn main() {
-    let settings = Settings::read_settings();
-    let path = main_menu(&settings);
-    let elapsed = Instant::now();
-    let directory = String::from(path + &settings.html_relative_directory);
+#[path = "ui/gui.rs"]
+mod gui;
 
-    parser::parse_results(directory, settings);
-    println!("Calculation finished in {} milliseconds", elapsed.elapsed().as_millis());
+fn main() -> Result<(), iced::Error> {
+    //let settings = Settings::read_settings();
+    //let path = main_menu(&settings);
+
+    //let directory = String::from(path + &settings.html_relative_directory);
+
+
+
+
+    TeamTotalsGui::run(iced::Settings::default())
 
 }

@@ -32,7 +32,7 @@ use crate::xlsx_writer;
 pub fn parse_results(path: String, settings: Settings) {
     let dir = match fs::read_dir(path.clone()) {
         Ok(e) => e,
-        Err(err) => panic!("{}", err),
+        Err(err) => panic!("{} ({})", err, path),
     };
 
     let files = dir.map(|f| {
@@ -70,6 +70,11 @@ pub fn parse_results(path: String, settings: Settings) {
     println!("Retrieved {} IJS results and {} 6.0 results.", results_ijs.len(), results_60.len());
     results_ijs.extend(results_60);
     let mut combined_raw_results = results_ijs;
+
+    if combined_raw_results.len() == 0 {
+        println!("A competition exists, but there are no results at this time.");
+        return
+    }
 
     clean_club_names(&mut combined_raw_results);
 
