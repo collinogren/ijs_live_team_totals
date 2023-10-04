@@ -23,6 +23,8 @@ SOFTWARE.
 use std::path::Path;
 use crate::settings::Settings;
 
+#[deprecated]
+#[allow(unused)]
 pub fn main_menu(settings: &Settings) -> String {
     if settings.use_event_name_for_results_path {
         println!("Enter the name of the competition you wish to talley");

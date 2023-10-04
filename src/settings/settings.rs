@@ -23,7 +23,6 @@ SOFTWARE.
 use std::fs;
 use std::path::Path;
 use serde_derive::{Deserialize, Serialize};
-use toml::ser::Error;
 
 pub const SETTINGS_PATH: &'static str = "./settings/settings.toml";
 

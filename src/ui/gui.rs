@@ -1,8 +1,8 @@
 use std::io::{ErrorKind};
 use std::path::Path;
 use std::time::Instant;
-use iced::{Application, Element, Sandbox, Theme};
-use iced::widget::{Button, Checkbox, Container, horizontal_rule, horizontal_space, row, column, text_input, vertical_space, vertical_rule};
+use iced::{Element, Sandbox, Theme};
+use iced::widget::{Button, Checkbox, Container, horizontal_space, row, column, text_input, vertical_rule};
 use crate::parser;
 use crate::settings::Settings;
 
@@ -25,7 +25,7 @@ pub enum TeamTotalsMessage {
 }
 
 fn get_directory(input: String, settings: &Settings) -> Result<String, ErrorKind> {
-    let mut result;
+    let result;
     if settings.use_event_name_for_results_path {
         println!("Enter the name of the competition you wish to talley");
 
