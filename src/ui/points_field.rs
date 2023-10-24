@@ -1,5 +1,4 @@
-/*
-Copyright (c) 2023 Collin Ogren
+/*Copyright (c) 2023 Collin Ogren
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,35 +19,38 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#![windows_subsystem = "windows"]
+/*
+use iced::overlay::Element;
+use iced::widget::{row, text, text_input};
+use iced::alignment::Vertical;
+use uuid::Uuid;
 
-use iced::Application;
-use crate::gui::TeamTotalsGui;
 
-#[path = "html_utilities/parser.rs"]
-mod parser;
-
-#[path = "settings/settings.rs"]
-mod settings;
-
-#[path = "ui/terminal_ui.rs"]
-mod terminal_ui;
-
-#[path = "excel/xlsx_writer.rs"]
-mod xlsx_writer;
-
-#[path = "html_utilities/results_sorter.rs"]
-mod results_sorter;
-
-#[path = "ui/gui.rs"]
-mod gui;
-
-#[path = "ui/points_field.rs"]
-mod points_field;
-
-fn main() -> Result<(), iced::Error> {
-    let mut settings = iced::Settings::default();
-    settings.window.size = (1000, 800);
-    TeamTotalsGui::run(settings)
-
+#[derive(Debug, Clone)]
+pub struct PointsField {
+    pub(crate) index: usize,
+    pub(crate) value: String,
 }
+
+impl PointsField {
+    pub fn new(index: usize, value: String) -> Self {
+        PointsField {
+            index,
+            value,
+        }
+    }
+
+    fn text_input_id(i: usize) -> text_input::Id {
+        text_input::Id::new(format!("{i}"))
+    }
+
+    pub fn view(&self, index: usize) -> Element<PointsForEachPlacement> {
+        let points_field = text_input(
+            format!("Points for position {}", index + 1).as_str(),
+            &self.value,
+        ).id(Self::text_input_id(index)).on_input(PointsForEachPlacement::Edited);
+
+       row![text(if index < 9 {format!("  {}: ", index + 1)} else {format!("{}: ", index + 1)}).vertical_alignment(Vertical::Center).height(30), points_field].into()
+    }
+}
+*/

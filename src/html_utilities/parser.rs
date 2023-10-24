@@ -34,7 +34,26 @@ pub enum State {
     Error,
 }
 
-pub fn parse_results(path: String, settings: Settings) -> (String, State) {
+#[derive(Debug, Clone)]
+pub struct Event {
+    pub(crate) event_name: String,
+    pub(crate) file_path: String,
+    pub(crate) scoring_system: ScoringSystem,
+    pub(crate) active: bool,
+}
+
+impl Event {
+    fn new(event_name: String, file_path: String, scoring_system: ScoringSystem, active: bool) -> Self {
+        Self {
+            event_name,
+            file_path,
+            scoring_system,
+            active,
+        }
+    }
+}
+
+pub fn retrieve_results(path: String) -> (Vec<Event>, String, State) {
     let dir = match fs::read_dir(path.clone()) {
         Ok(e) => e,
         Err(err) => panic!("{} ({})", err, path),
@@ -66,15 +85,51 @@ pub fn parse_results(path: String, settings: Settings) -> (String, State) {
     files_60.sort();
     files_ijs.sort();
 
-    let mut results_ijs = parser_ijs(files_ijs, settings.clone());
-    let results_60 = parser_60(files_60, settings.clone());
+    let mut event_names = parse_ijs_event_names(&files_ijs);
+    event_names.extend(parse_60_event_names(&files_60));
+    let event_names_clone = event_names.clone();
+    let mut event_names_temp = event_names_clone.iter().map(|v| {
+        v.event_name.as_str()
+    }).collect::<Vec<&str>>();
+
+    //let mut event_names_slice = &mut event_names.as_slice();
+
+    human_sort::sort(&mut event_names_temp);
+
+    for (i, event_name) in event_names_temp.iter().enumerate() {
+        event_names[i].event_name = event_name.to_string();
+    }
+
+    event_names = clean_event_names(event_names);
+
+    if event_names.len() == 0 {
+        return (event_names, format!("The specified competition exists, but there are no results at this time."), State::Error);
+    }
+
+
+    (event_names, format!("Found {} IJS events and {} 6.0 events.", files_ijs.len(), files_60.len()), State::Ok)
+}
+
+pub fn parse_results(events: Vec<Event>, settings: &Settings) -> (String, State) {
+    let mut files_ijs = vec![];
+    let mut files_60 = vec![];
+
+    for event in &events {
+        if event.active {
+            if event.scoring_system == IJS {
+                files_ijs.push(event.file_path.clone());
+            } else if event.scoring_system == SixO {
+                files_60.push(event.file_path.clone());
+            }
+        }
+    }
+
+    let mut results_ijs = parse_ijs(files_ijs);
+    let results_60 = parse_60(files_60);
     let number_results_60_found = format!("Retrieved {} IJS results and {} 6.0 results.", results_ijs.len(), results_60.len());
+    println!("{}", number_results_60_found);
     results_ijs.extend(results_60);
     let mut combined_raw_results = results_ijs;
-
-    if combined_raw_results.len() == 0 {
-        return (format!("The specified competition exists, but there are no results at this time."), State::Error);
-    }
 
     clean_club_names(&mut combined_raw_results);
 
@@ -99,7 +154,7 @@ pub fn parse_results(path: String, settings: Settings) -> (String, State) {
         fs::write(settings.txt_path(), team_totals.join("\n")).unwrap();
     }
 
-    (number_results_60_found, State::Ok)
+    (String::from("Results Successfully Calculated"), State::Ok)
 }
 
 const HTML_CHARACTER_ENTITIES: [(&'static str, &'static str); 12] = [
@@ -117,6 +172,18 @@ const HTML_CHARACTER_ENTITIES: [(&'static str, &'static str); 12] = [
     ("&reg;", "®")
 ];
 
+fn clean_event_names(mut event_names: Vec<Event>) -> Vec<Event> {
+    for event_name in &mut event_names {
+
+        for character_entities in HTML_CHARACTER_ENTITIES {
+            let temp = event_name.event_name.replace(character_entities.0, character_entities.1).clone();
+            event_name.event_name = temp;
+        }
+    }
+
+    event_names
+}
+
 fn clean_club_names(result_sets: &mut Vec<ResultSet>) {
     for result_set in result_sets {
         let name = match &result_set.club {
@@ -133,6 +200,7 @@ fn clean_club_names(result_sets: &mut Vec<ResultSet>) {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum ScoringSystem {
     IJS,
     SixO,
@@ -149,13 +217,83 @@ impl ResultSet {
         Self {
             rank: None,
             club: None,
-            scoring_system
+            scoring_system,
         }
     }
 }
 
-pub fn parser_ijs(ijs_events: Vec<String>, _settings: Settings) -> Vec<ResultSet> {
+fn parse_ijs_event_names(ijs_events: &Vec<String>) -> Vec<Event> {
+    let mut event_names = vec![];
+    for results_file_path in ijs_events {
+        let results_file_contents = fs::read_to_string(results_file_path).unwrap();
+        let document = Html::parse_document(&results_file_contents);
+        let selector = Selector::parse(r#"body > h2"#).unwrap();
+
+        let document_select = document.select(&selector);
+        let document_select_collection = document_select.collect::<Vec<ElementRef>>();
+        for element in document_select_collection.clone().into_iter().enumerate() {
+            if element.1.has_class(&CssLocalName::from("catseg"), CaseSensitivity::CaseSensitive) {
+                let event_name = match
+                String::from(element.1.html()
+                    .split("<h2 class=\"catseg\">")
+                    .nth(1)
+                    .unwrap()
+                    .split("</h2>")
+                    .nth(0)
+                    .unwrap()
+                ).parse() {
+                    Ok(n) => n,
+                    Err(err) => panic!("{}", err),
+                };
+
+                event_names.push(Event::new(event_name, results_file_path.clone(), IJS, true));
+                continue
+            }
+        }
+    }
+
+    event_names
+}
+
+fn parse_60_event_names(ijs_events: &Vec<String>) -> Vec<Event> {
+    let mut event_names = vec![];
+    for results_file_path in ijs_events {
+        let results_file_contents = fs::read_to_string(results_file_path).unwrap();
+        let document = Html::parse_document(&results_file_contents);
+        let selector = Selector::parse(r#"table > caption > h2"#).unwrap();
+
+        let document_select = document.select(&selector);
+        let document_select_collection = document_select.collect::<Vec<ElementRef>>();
+        for element in document_select_collection.clone().into_iter().enumerate() {
+            if element.1.html().starts_with("<h2>") {
+                let next_element = document_select_collection.get(element.0 + 1).unwrap();
+                if next_element.html().starts_with("<h2>") {
+                    let event_name = match
+                    String::from(next_element.html()
+                        .split("<h2>")
+                        .nth(1)
+                        .unwrap()
+                        .split("</h2>")
+                        .nth(0)
+                        .unwrap()
+                    ).parse() {
+                        Ok(n) => n,
+                        Err(err) => panic!("{}", err),
+                    };
+
+                    event_names.push(Event::new(event_name, results_file_path.clone(), SixO, true));
+                    break;
+                }
+            }
+        }
+    }
+
+    event_names
+}
+
+pub fn parse_ijs(ijs_events: Vec<String>) -> Vec<ResultSet> {
     let mut results = vec![];
+
     for results_file_path in ijs_events {
         let results_file_contents = fs::read_to_string(results_file_path).unwrap();
         let document = Html::parse_document(&results_file_contents);
@@ -172,11 +310,9 @@ pub fn parser_ijs(ijs_events: Vec<String>, _settings: Settings) -> Vec<ResultSet
                     .split("<td class=\"rank\">")
                     .nth(1)
                     .unwrap()
-                    .clone()
                     .split("</td>")
                     .nth(0)
                     .unwrap()
-                    .clone()
                 ).parse() {
                     Ok(n) => n,
                     Err(err) => panic!("{}", err),
@@ -194,15 +330,12 @@ pub fn parser_ijs(ijs_events: Vec<String>, _settings: Settings) -> Vec<ResultSet
                         .split("<td class=\"name\">")
                         .nth(1)
                         .unwrap()
-                        .clone()
                         .split("</td>")
                         .nth(0)
                         .unwrap()
-                        .clone()
                         .split(", ")
                         .nth(1)
                         .unwrap()
-                        .clone()
                     )
                 );
             }
@@ -214,7 +347,7 @@ pub fn parser_ijs(ijs_events: Vec<String>, _settings: Settings) -> Vec<ResultSet
     results
 }
 
-pub fn parser_60(files_60: Vec<String>, _settings: Settings) -> Vec<ResultSet> {
+pub fn parse_60(files_60: Vec<String>) -> Vec<ResultSet> {
     let mut results = vec![];
     for results_file_path in files_60 {
         let results_file_contents = fs::read_to_string(results_file_path.clone()).unwrap();
@@ -226,19 +359,17 @@ pub fn parser_60(files_60: Vec<String>, _settings: Settings) -> Vec<ResultSet> {
         for element in document_select_collection.clone().into_iter().enumerate() {
             let mut has_name = false;
             let mut result_set = ResultSet::new(SixO);
+
             if element.1.html().contains("<td rowspan=\"1\" colspan=\"1\">") { // Name first this time because the name has more distinctive markings for it in the HTML.
                 let temp_club =                     String::from(element.1.html()
                     .split("<td rowspan=\"1\" colspan=\"1\">")
                     .nth(1)
                     .unwrap()
-                    .clone()
                     .split("</td>").nth(0)
                     .unwrap()
-                    .clone()
                     .split(", ")
                     .nth(1)
                     .unwrap()
-                    .clone()
                 );
 
                 if temp_club.contains("<br>") { // Handle duets and such by disregarding them. This is a terrible solution.
@@ -253,14 +384,11 @@ pub fn parser_60(files_60: Vec<String>, _settings: Settings) -> Vec<ResultSet> {
                     .split("<td colspan=\"1\" rowspan=\"1\">")
                     .nth(1)
                     .unwrap()
-                    .clone()
                     .split("</td>").nth(0)
                     .unwrap()
-                    .clone()
                     .split(", ")
                     .nth(1)
                     .unwrap()
-                    .clone()
                 );
 
                 if temp_club.contains("<br>") { // Handle duets and such by disregarding them. This is a terrible solution.
@@ -281,11 +409,9 @@ pub fn parser_60(files_60: Vec<String>, _settings: Settings) -> Vec<ResultSet> {
                 .split("<td>")
                 .nth(1)
                 .unwrap()
-                .clone()
                 .split(".</td>")
                 .nth(0)
                 .unwrap()
-                .clone()
             );
 
             if temp_rank.contains("&nbsp;") {
