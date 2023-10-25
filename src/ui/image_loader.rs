@@ -1,5 +1,4 @@
-/*
-Copyright (c) 2023 Collin Ogren
+/*Copyright (c) 2023 Collin Ogren
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -20,38 +19,35 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#![windows_subsystem = "windows"]
+use std::fs::File;
+use png::{Decoder};
 
-use iced::Application;
-use crate::gui::TeamTotalsGui;
+pub fn png_to_rgba(path: &str) -> (Vec<u8>, u32, u32) {
+    let decoder = Decoder::new(
+        match File::open(path) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("Failed to read icon: {}", err);
+            return (vec![], 0, 0);
+        }
+    });
+    let mut reader = match decoder.read_info() {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("Failed to read icon: {}", err);
+            return (vec![], 0, 0);
+        }
+    };
 
-#[path = "html_utilities/parser.rs"]
-mod parser;
+    let mut buffer = vec![0; reader.output_buffer_size()];
 
-#[path = "settings/settings.rs"]
-mod settings;
+    let info = match reader.next_frame(&mut buffer) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("Failed to read icon: {}", err);
+            return (vec![], 0, 0);
+        }
+    };
 
-#[path = "ui/terminal_ui.rs"]
-mod terminal_ui;
-
-#[path = "excel/xlsx_writer.rs"]
-mod xlsx_writer;
-
-#[path = "html_utilities/results_sorter.rs"]
-mod results_sorter;
-
-#[path = "ui/gui.rs"]
-mod gui;
-
-#[path = "ui/points_field.rs"]
-mod points_field;
-
-#[path = "ui/image_loader.rs"]
-mod image_loader;
-
-fn main() -> Result<(), iced::Error> {
-    let mut settings = iced::Settings::default();
-    settings.window.size = (1000, 800);
-    TeamTotalsGui::run(settings)
-
+    (buffer[..info.buffer_size()].to_vec(), info.width, info.height)
 }

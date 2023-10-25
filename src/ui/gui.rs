@@ -26,14 +26,15 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::{thread, vec};
-use iced::{Alignment, Application, Command, Element, keyboard, Subscription, Theme, widget};
+use iced::{Alignment, Application, Command, Element, keyboard, Subscription, Theme, widget, window};
 use iced::alignment::Vertical;
 use iced::widget::{Button, Checkbox, horizontal_space, row, column, text_input, vertical_space, vertical_rule, text, Scrollable, keyed_column, container, scrollable, checkbox};
 use iced::widget::scrollable::{RelativeOffset};
+use iced::window::icon;
 use native_dialog::FileDialog;
 use once_cell::sync::Lazy;
-use crate::gui::EventToInclude::Edited;
 use crate::gui::TeamTotalsMessage::{HTMLRelativeDirectory, ISUCalcBaseDirectory, OutputDirectory, TXTFileName, XLSXFileName, XLSXFontSize};
+use crate::image_loader::png_to_rgba;
 use crate::parser;
 use crate::parser::{Event, State};
 use crate::settings::Settings;
@@ -54,8 +55,17 @@ pub struct TeamTotalsGui {
     points_for_each_placement: Vec<PointsField>,
     competition_directory_receiver: RefCell<Option<Receiver<PathBuf>>>,
     competition_directory_sender: Sender<PathBuf>,
+
+    event_names_receiver: RefCell<Option<Receiver<(Vec<Event>, String)>>>,
+    event_names_sender: Sender<(Vec<Event>, String)>,
+
+    results_receiver: RefCell<Option<Receiver<String>>>,
+    results_sender: Sender<String>,
+
     events: Vec<Event>,
     event_controls: Vec<EventsControls>,
+    last_checkbox: isize,
+    is_shift_down: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -77,6 +87,8 @@ pub enum TeamTotalsMessage {
     OutputDirectory(String),
     PointsForEachPlacement(usize, PointsForEachPlacement),
     EventInclusionChanged(usize, EventToInclude),
+    EventsRetrieved(Vec<Event>, String),
+    ResultsRetrieved(String),
 
     TabPressed {shift: bool},
     FindReceived(PathBuf),
@@ -84,6 +96,8 @@ pub enum TeamTotalsMessage {
 
     AddPlacement,
     RemovePlacement,
+    ShiftPressed,
+    ShiftReleased,
 }
 
 fn get_directory(input: String, settings: &Settings) -> Result<String, ErrorKind> {
@@ -119,7 +133,7 @@ fn retrieve_events(competition: String, settings: Settings) -> (Vec<Event>, Stri
         Err(_) => return (vec![], String::from("No competition found.")), // Should send signal to the user that no path is found.
     };
 
-    let (events, output, state) = parser::retrieve_results(path);
+    let (events, output, state) = parser::retrieve_events(path);
 
     match state {
         State::Ok => (events, output),
@@ -179,7 +193,9 @@ impl Application for TeamTotalsGui {
     fn new(_flags: Self::Flags) -> (Self, Command<Self::Message>) {
         let settings = Settings::read();
 
-        let (sender, receiver) = mpsc::channel::<PathBuf>();
+        let (path_sender, path_receiver) = mpsc::channel::<PathBuf>();
+        let (event_names_sender, event_names_receiver) = mpsc::channel::<(Vec<Event>, String)>();
+        let (results_sender, results_receiver) = mpsc::channel::<String>();
 
         let mut gui = TeamTotalsGui {
             competition: String::new(),
@@ -188,13 +204,24 @@ impl Application for TeamTotalsGui {
             theme: Theme::Dark,
             font_size: settings.xlsx_font_size.to_string(),
             points_for_each_placement: vec![],
-            competition_directory_sender: sender,
-            competition_directory_receiver: RefCell::new(Some(receiver)),
+            competition_directory_sender: path_sender,
+            competition_directory_receiver: RefCell::new(Some(path_receiver)),
+            event_names_receiver: RefCell::new(Some(event_names_receiver)),
+            event_names_sender,
+            results_sender,
+            results_receiver: RefCell::new(Some(results_receiver)),
             events: vec![],
             event_controls: vec![],
+            last_checkbox: -1,
+            is_shift_down: false,
         };
 
         let mut commands = vec![];
+
+        let (raw_icon, width, height) = png_to_rgba("./assets/icon.png");
+        let icon = window::change_icon(icon::from_rgba(raw_icon, width, height).unwrap());
+
+        commands.push(icon);
 
         commands.push(text_input::focus(COMPETITION_INPUT_ID.clone()));
 
@@ -217,12 +244,25 @@ impl Application for TeamTotalsGui {
                 Command::none()
             },
             TeamTotalsMessage::RetrieveResults => {
-                let (events, status) = retrieve_events(self.competition.clone(), self.settings.clone());
+                let sender = self.event_names_sender.clone();
+
+                let competition = self.competition.clone();
+                let settings = self.settings.clone();
+
+                thread::spawn(move || {
+                    let ret = retrieve_events(competition, settings);
+                    sender.send(ret).unwrap();
+                });
+
+                Command::none()
+            }
+            TeamTotalsMessage::EventsRetrieved(events, status) => {
                 self.events = events;
                 self.event_controls = self.events.iter().enumerate().map(|(i, event)| {
                     EventsControls::new(i, event.clone())
                 }).collect::<Vec<EventsControls>>();
                 self.status = status;
+
                 Command::none()
             }
             TeamTotalsMessage::Include60(include_60) => {
@@ -349,17 +389,54 @@ impl Application for TeamTotalsGui {
 
             TeamTotalsMessage::EventInclusionChanged(i, event) => {
                 match event {
-                    Edited(b) => {
-                        self.event_controls[i].event.active = b;
-                        self.events[i] = self.event_controls[i].event.clone();
-                        println!("{} is now {}", self.events[i].event_name, self.events[i].active);
+                    EventToInclude::Edited(b) => {
+                        if self.is_shift_down && self.last_checkbox > -1 {
+                            for x in if self.last_checkbox < (i + 1) as isize {
+                                self.last_checkbox..(i + 1) as isize
+                            } else {
+                                i as isize.. self.last_checkbox + 1
+                            } {
+                                let x = x as usize;
+                                self.event_controls[x].event.active = b;
+                                self.events[x] = self.event_controls[x].event.clone();
+                            }
+                        } else {
+                            self.event_controls[i].event.active = b;
+                            self.events[i] = self.event_controls[i].event.clone();
+                        }
+
+                        self.last_checkbox = i as isize;
                     }
                 }
 
                 Command::none()
             }
             TeamTotalsMessage::CalculateResults => {
-                self.status = calculate(self.events.clone(), &self.settings);
+                let sender = self.results_sender.clone();
+
+                let events = self.events.clone();
+                let settings = self.settings.clone();
+
+                thread::spawn(move || {
+                    sender.send(calculate(events, &settings)).unwrap();
+                });
+
+                Command::none()
+            }
+
+            TeamTotalsMessage::ResultsRetrieved(status) => {
+                self.status = status;
+
+                Command::none()
+            }
+
+            TeamTotalsMessage::ShiftPressed => {
+                self.is_shift_down = true;
+
+                Command::none()
+            }
+            TeamTotalsMessage::ShiftReleased => {
+                self.is_shift_down = false;
 
                 Command::none()
             }
@@ -387,7 +464,16 @@ impl Application for TeamTotalsGui {
 
         let retrieve_data_button = Button::new("Retrieve Data").on_press(TeamTotalsMessage::RetrieveResults).width(130);
 
-        let calculate_button = if self.events.len() > 0 {
+        let mut can_calculate = false;
+
+        for event in &self.events {
+            if event.active {
+                can_calculate = true;
+                break;
+            }
+        }
+
+        let calculate_button = if can_calculate {
             Button::new("Tabulate Results").on_press(TeamTotalsMessage::CalculateResults).width(130)
         } else {
             Button::new("Tabulate Results").width(130)
@@ -523,13 +609,36 @@ impl Application for TeamTotalsGui {
         let mut subscriptions = vec![];
         let tab = keyboard::on_key_press(|key_code, modifiers| {
             match (key_code, modifiers) {
+                (keyboard::KeyCode::LShift, _) => Some(TeamTotalsMessage::ShiftPressed),
+                (keyboard::KeyCode::RShift, _) => Some(TeamTotalsMessage::ShiftPressed),
                 (keyboard::KeyCode::Tab, _) => Some(TeamTotalsMessage::TabPressed {
                     shift: modifiers.shift(),
                 }),
                 _ => None,
             }
         });
+
         subscriptions.push(tab);
+
+        let shift_down = keyboard::on_key_press(|key_code, modifiers| {
+            match (key_code, modifiers) {
+                (keyboard::KeyCode::LShift, _) => Some(TeamTotalsMessage::ShiftPressed),
+                (keyboard::KeyCode::RShift, _) => Some(TeamTotalsMessage::ShiftPressed),
+                _ => None,
+            }
+        });
+
+        let shift_up = keyboard::on_key_release(|key_code, modifiers| {
+            match (key_code, modifiers) {
+                (keyboard::KeyCode::LShift, _) => Some(TeamTotalsMessage::ShiftReleased),
+                (keyboard::KeyCode::RShift, _) => Some(TeamTotalsMessage::ShiftReleased),
+                _ => None,
+            }
+        });
+
+        subscriptions.push(shift_down);
+        subscriptions.push(shift_up);
+
         let competition_directory = iced::subscription::unfold(
             "competition_name_subscription",
             self.competition_directory_receiver.take(),
@@ -542,6 +651,32 @@ impl Application for TeamTotalsGui {
             },
         );
         subscriptions.push(competition_directory);
+
+        let retrieve_events = iced::subscription::unfold(
+            "retrieve_events",
+            self.event_names_receiver.take(),
+            move |mut receiver| async move {
+                let (events, status) = match receiver.as_mut().unwrap().recv() {
+                    Ok(v) => v,
+                    Err(_) => (vec![], String::from("Failed to retrieve events.")),
+                };
+                (TeamTotalsMessage::EventsRetrieved(events, status), receiver)
+            },
+        );
+        subscriptions.push(retrieve_events);
+
+        let retrieve_results = iced::subscription::unfold(
+            "retrieve_results",
+            self.results_receiver.take(),
+            move |mut receiver| async move {
+                let status = match receiver.as_mut().unwrap().recv() {
+                    Ok(v) => v,
+                    Err(_) => String::from("Failed to retrieve status."),
+                };
+                (TeamTotalsMessage::ResultsRetrieved(status), receiver)
+            },
+        );
+        subscriptions.push(retrieve_results);
 
         Subscription::batch(subscriptions)
     }
@@ -567,7 +702,7 @@ impl EventsControls {
     }
 
     pub fn view(&self) -> Element<EventToInclude> {
-        let checkbox = checkbox("", self.event.active, Edited);
+        let checkbox = checkbox("", self.event.active, EventToInclude::Edited);
 
         row![checkbox, text(&self.event.event_name).vertical_alignment(Vertical::Center).height(30)].align_items(Alignment::Center).into()
     }

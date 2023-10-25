@@ -20,7 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::fs;
+use std::{fs, thread};
+use std::sync::{Arc, mpsc, RwLock};
 
 use scraper::{CaseSensitivity, Element, ElementRef, Html, Selector};
 use scraper::selector::CssLocalName;
@@ -53,7 +54,7 @@ impl Event {
     }
 }
 
-pub fn retrieve_results(path: String) -> (Vec<Event>, String, State) {
+pub fn retrieve_events(path: String) -> (Vec<Event>, String, State) {
     let dir = match fs::read_dir(path.clone()) {
         Ok(e) => e,
         Err(err) => panic!("{} ({})", err, path),
@@ -63,36 +64,60 @@ pub fn retrieve_results(path: String) -> (Vec<Event>, String, State) {
         String::from(f.unwrap().file_name().to_str().unwrap())
     }).collect::<Vec<String>>();
 
-    let mut files_60 = vec![];
-    let mut files_ijs = vec![];
+    let files_60 = Arc::new(RwLock::new(vec![]));
+    let files_ijs = Arc::new(RwLock::new(vec![]));
 
     //Get all files for 6.0 and IJS separately.
     for file in files {
         //Get all 6.0 results files. These files seem to have names ending in c1.htm.
         if file.ends_with("c1.htm") {
-            files_60.push(String::from(path.clone() + "/" + file.as_str()));
+            files_60.write().unwrap().push(String::from(path.clone() + "/" + file.as_str()));
             continue;
         }
 
         //Reading from the protocol sheets seems to be the easiest way to do this locally.
         //The protocol sheets seem to be contained in files that start with SEGM
         if file.starts_with("SEGM") {
-            files_ijs.push(String::from(path.clone() + "/" + file.as_str()));
+            files_ijs.write().unwrap().push(String::from(path.clone() + "/" + file.as_str()));
             continue
         }
     }
 
-    files_60.sort();
-    files_ijs.sort();
+    let files_ijs_clones = files_ijs.clone();
+    let files_ijs_thread = thread::spawn(move || {
+        files_ijs_clones.write().unwrap().sort();
+    });
 
-    let mut event_names = parse_ijs_event_names(&files_ijs);
-    event_names.extend(parse_60_event_names(&files_60));
+    let files_60_clone = files_60.clone();
+    let files_60_thread = thread::spawn(move || {
+        files_60_clone.write().unwrap().sort();
+    });
+
+    while !files_ijs_thread.is_finished() || !files_60_thread.is_finished() {}
+
+    let files_ijs_clones = files_ijs.clone();
+    let (events_ijs_sender, events_ijs_receiver) = mpsc::channel::<Vec<Event>>();
+    let events_thread_ijs = thread::spawn(move || {
+        let event_names_ijs = parse_ijs_event_names(&files_ijs_clones.read().unwrap());
+        events_ijs_sender.send(event_names_ijs).unwrap();
+    });
+
+    let files_60_clones = files_60.clone();
+    let (events_60_sender, events_60_receiver) = mpsc::channel::<Vec<Event>>();
+    let events_thread_60 = thread::spawn(move || {
+        let event_names_60 = parse_60_event_names(&files_60_clones.read().unwrap());
+        events_60_sender.send(event_names_60).unwrap();
+    });
+
+    while !events_thread_ijs.is_finished() || !events_thread_60.is_finished() {}
+
+    let mut event_names = events_ijs_receiver.recv().unwrap();
+    event_names.extend(events_60_receiver.recv().unwrap());
+
     let event_names_clone = event_names.clone();
     let mut event_names_temp = event_names_clone.iter().map(|v| {
         v.event_name.as_str()
     }).collect::<Vec<&str>>();
-
-    //let mut event_names_slice = &mut event_names.as_slice();
 
     human_sort::sort(&mut event_names_temp);
 
@@ -107,7 +132,7 @@ pub fn retrieve_results(path: String) -> (Vec<Event>, String, State) {
     }
 
 
-    (event_names, format!("Found {} IJS events and {} 6.0 events.", files_ijs.len(), files_60.len()), State::Ok)
+    (event_names, format!("Found {} IJS events and {} 6.0 events.", files_ijs.read().unwrap().len(), files_60.read().unwrap().len()), State::Ok)
 }
 
 pub fn parse_results(events: Vec<Event>, settings: &Settings) -> (String, State) {
@@ -124,12 +149,33 @@ pub fn parse_results(events: Vec<Event>, settings: &Settings) -> (String, State)
         }
     }
 
-    let mut results_ijs = parse_ijs(files_ijs);
-    let results_60 = parse_60(files_60);
+    let files_ijs = Arc::new(files_ijs);
+    let files_60 = Arc::new(files_60);
+
+    let (results_ijs_sender, results_ijs_receiver) = mpsc::channel::<Vec<ResultSet>>();
+
+    let files_ijs_clone = files_ijs.clone();
+    let results_ijs_thread = thread::spawn(move || {
+        results_ijs_sender.send(parse_ijs(files_ijs_clone.to_vec())).unwrap();
+    });
+
+    let (results_60_sender, results_60_receiver) = mpsc::channel::<Vec<ResultSet>>();
+
+    let files_60_clone = files_60.clone();
+    let results_60_thread = thread::spawn(move || {
+        results_60_sender.send(parse_60(files_60_clone.to_vec())).unwrap();
+    });
+
+    while !results_ijs_thread.is_finished() || !results_60_thread.is_finished() {}
+
+    let results_ijs = results_ijs_receiver.recv().unwrap();
+    let results_60 = results_60_receiver.recv().unwrap();
+
     let number_results_60_found = format!("Retrieved {} IJS results and {} 6.0 results.", results_ijs.len(), results_60.len());
     println!("{}", number_results_60_found);
-    results_ijs.extend(results_60);
+
     let mut combined_raw_results = results_ijs;
+    combined_raw_results.extend(results_60);
 
     clean_club_names(&mut combined_raw_results);
 

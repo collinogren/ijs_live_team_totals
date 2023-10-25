@@ -1,6 +1,6 @@
 [package]
 name = "ijs_live_team_totals"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 resolver = "2"
 
@@ -18,3 +18,4 @@ async-std = "1.12.0"
 native-dialog = "0.6.4"
 human-sort = "0.2.2"
 once_cell = "1.18.0"
+png = "0.17.10"
