@@ -93,23 +93,22 @@ pub fn retrieve_events(path: String) -> (Vec<Event>, String, State) {
         files_60_clone.write().unwrap().sort();
     });
 
-    while !files_ijs_thread.is_finished() || !files_60_thread.is_finished() {}
+    files_ijs_thread.join().unwrap();
+    files_60_thread.join().unwrap();
 
     let files_ijs_clones = files_ijs.clone();
     let (events_ijs_sender, events_ijs_receiver) = mpsc::channel::<Vec<Event>>();
-    let events_thread_ijs = thread::spawn(move || {
+    thread::spawn(move || {
         let event_names_ijs = parse_ijs_event_names(&files_ijs_clones.read().unwrap());
         events_ijs_sender.send(event_names_ijs).unwrap();
     });
 
     let files_60_clones = files_60.clone();
     let (events_60_sender, events_60_receiver) = mpsc::channel::<Vec<Event>>();
-    let events_thread_60 = thread::spawn(move || {
+    thread::spawn(move || {
         let event_names_60 = parse_60_event_names(&files_60_clones.read().unwrap());
         events_60_sender.send(event_names_60).unwrap();
     });
-
-    while !events_thread_ijs.is_finished() || !events_thread_60.is_finished() {}
 
     let mut event_names = events_ijs_receiver.recv().unwrap();
     event_names.extend(events_60_receiver.recv().unwrap());
@@ -155,18 +154,18 @@ pub fn parse_results(events: Vec<Event>, settings: &Settings) -> (String, State)
     let (results_ijs_sender, results_ijs_receiver) = mpsc::channel::<Vec<ResultSet>>();
 
     let files_ijs_clone = files_ijs.clone();
-    let results_ijs_thread = thread::spawn(move || {
+    thread::spawn(move || {
         results_ijs_sender.send(parse_ijs(files_ijs_clone.to_vec())).unwrap();
     });
 
     let (results_60_sender, results_60_receiver) = mpsc::channel::<Vec<ResultSet>>();
 
     let files_60_clone = files_60.clone();
-    let results_60_thread = thread::spawn(move || {
+    thread::spawn(move || {
         results_60_sender.send(parse_60(files_60_clone.to_vec())).unwrap();
     });
 
-    while !results_ijs_thread.is_finished() || !results_60_thread.is_finished() {}
+    //while !results_ijs_thread.is_finished() || !results_60_thread.is_finished() {}
 
     let results_ijs = results_ijs_receiver.recv().unwrap();
     let results_60 = results_60_receiver.recv().unwrap();
