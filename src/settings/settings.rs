@@ -22,9 +22,29 @@ SOFTWARE.
 
 use std::fs;
 use std::path::Path;
+use directories::{ProjectDirs, UserDirs};
 use serde_derive::{Deserialize, Serialize};
 
-pub const SETTINGS_PATH: &'static str = "./settings/settings.toml";
+const SETTINGS_FILE: &'static str = "/settings.toml";
+
+pub fn appdata(relative: &str) -> (String, String) {
+    match ProjectDirs::from("", "",  "IJSLive Team Totals") {
+        Some(v) => (format!("{}{}", v.config_dir().to_string_lossy().replace("\\", "/"), relative), v.config_dir().to_string_lossy().replace("\\", "/")),
+        None => (String::new(), String::new()),
+    }
+}
+
+pub fn documents() -> String {
+    match UserDirs::new() {
+        None => {String::new()}
+        Some(user_dirs) => {
+            match user_dirs.document_dir() {
+                None => {String::new()}
+                Some(v) => {format!("{}{}", v.to_string_lossy().replace("\\", "/"), "/IJSLive Team Totals")}
+            }
+        }
+    }
+}
 
 #[derive(Clone)]
 #[derive(Serialize, Deserialize)]
@@ -58,7 +78,7 @@ impl Default for Settings {
             use_event_name_for_results_path: true,
             isu_calc_base_directory: String::from("C:/ISUCalcFS/"),
             html_relative_directory: String::from("/IJScompanion_html_winnercomm"),
-            output_directory: String::from("./"),
+            output_directory: documents(),
             xlsx_file_name: String::from("team_totals.xlsx"),
             txt_file_name: String::from("team_totals.txt"),
             xlsx_header_cell_values: vec![String::from("Rank"), String::from("Club"), String::from("IJS"), String::from("6.0"), String::from("Total")],
@@ -108,10 +128,11 @@ impl Settings {
     }
 
     pub fn read() -> Self {
-        if !Path::new(SETTINGS_PATH).exists() {
-            match fs::create_dir("./settings") {
+        let (settings_file, settings_dir) = appdata(SETTINGS_FILE);
+        if !Path::new(settings_file.as_str()).exists() {
+            match fs::create_dir_all(settings_dir.clone()) {
                 Ok(_) => {}
-                Err(err) => eprintln!("Failed to create settings directory: {}", err),
+                Err(err) => eprintln!("Failed to create settings directory at {}: {}", settings_dir, err),
             };
             let toml = match toml::to_string(&Settings::default()) {
                 Ok(v) => v,
@@ -120,12 +141,12 @@ impl Settings {
                     format!("Failed to serialize default settings.toml file: {}", err)
                 }
             };
-            match fs::write(SETTINGS_PATH, toml) {
+            match fs::write(settings_file.clone(), toml) {
                 Ok(_) => {}
                 Err(err) => eprintln!("Failed to write to settings.toml file: {}", err),
             }
         }
-        let contents = match fs::read_to_string(SETTINGS_PATH) {
+        let contents = match fs::read_to_string(settings_file.clone()) {
             Ok(v) => v,
             Err(err) => {
                 eprintln!("Failed to read settings file: {}\nUsing default values.", err);
@@ -145,6 +166,7 @@ impl Settings {
     }
 
     pub fn write(&self) {
+        let (settings_file, _settings_dir) = appdata(SETTINGS_FILE);
         let toml = match toml::to_string(self) {
             Ok(toml) => { toml }
             Err(err) => {
@@ -152,8 +174,8 @@ impl Settings {
                 return
             }
         };
-        
-        match fs::write(SETTINGS_PATH, toml) {
+
+        match fs::write(settings_file, toml) {
             Ok(_) => {
                 println!("Successfully wrote to settings.toml")
             }

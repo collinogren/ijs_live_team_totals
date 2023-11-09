@@ -20,6 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+use std::fs;
 use std::path::Path;
 use rust_xlsxwriter;
 use rust_xlsxwriter::{ColNum, Format, FormatAlign, Formula, Workbook};
@@ -58,6 +59,26 @@ pub fn create_xlsx(club_points: &Vec<ClubPoints>, settings: Settings) {
         worksheet.write_with_format(i as u32 + 1, 2, result.points_ijs, &text_format).expect(format!("Failed to write IJS score for {}", result.club).as_str());
         worksheet.write_with_format(i as u32 + 1, 3, result.points_60, &text_format).expect(format!("Failed to write 6.0 score for {}", result.club).as_str());
         worksheet.write_with_format(i as u32 + 1, 4, Formula::new(format!("=SUM(C{}:D{})", i as u32 + 2, i as u32 + 2).as_str()), &text_format).expect(format!("Failed to write total for {}", result.club).as_str());
+    }
+
+    let output_path_exists = match fs::try_exists(settings.output_directory.clone()) {
+        Ok(v) => {v}
+        Err(err) => {
+            eprintln!("Failed to verify the existence of the path output path: {}", err);
+            return;
+        }
+    };
+
+    if !output_path_exists {
+        match fs::create_dir_all(settings.output_directory.clone()) {
+            Ok(_) => {
+                println!("Successfully wrote output directory");
+            }
+            Err(err) => {
+                eprintln!("Failed to write output directory: {}", err);
+                return;
+            }
+        };
     }
 
     let path = settings.xlsx_path();

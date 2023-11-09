@@ -25,7 +25,7 @@ use std::io::{ErrorKind};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
-use std::{thread, vec};
+use std::{fs, thread, vec};
 use iced::{Alignment, Application, Command, Element, keyboard, Subscription, Theme, widget, window};
 use iced::alignment::Vertical;
 use iced::widget::{Button, Checkbox, horizontal_space, row, column, text_input, vertical_space, vertical_rule, text, Scrollable, keyed_column, container, scrollable, checkbox};
@@ -37,7 +37,8 @@ use crate::gui::TeamTotalsMessage::{HTMLRelativeDirectory, ISUCalcBaseDirectory,
 use crate::image_loader::png_to_rgba;
 use crate::parser;
 use crate::parser::{Event, State};
-use crate::settings::Settings;
+use crate::settings::{appdata, Settings};
+use crate::timer::{Timer};
 
 static COMPETITION_INPUT_ID: Lazy<text_input::Id> = Lazy::new(competition_input_id);
 static SCROLLABLE_ID: Lazy<scrollable::Id> = Lazy::new(scrollable::Id::unique);
@@ -56,6 +57,9 @@ pub struct TeamTotalsGui {
     competition_directory_receiver: RefCell<Option<Receiver<PathBuf>>>,
     competition_directory_sender: Sender<PathBuf>,
 
+    output_directory_receiver: RefCell<Option<Receiver<PathBuf>>>,
+    output_directory_sender: Sender<PathBuf>,
+
     event_names_receiver: RefCell<Option<Receiver<(Vec<Event>, String)>>>,
     event_names_sender: Sender<(Vec<Event>, String)>,
 
@@ -66,6 +70,8 @@ pub struct TeamTotalsGui {
     event_controls: Vec<EventsControls>,
     last_checkbox: isize,
     is_shift_down: bool,
+
+    status_timer: Option<Timer>,
 }
 
 #[derive(Debug, Clone)]
@@ -93,6 +99,12 @@ pub enum TeamTotalsMessage {
     TabPressed {shift: bool},
     FindReceived(PathBuf),
     Find,
+    FindOutputDirectoryReceived(PathBuf),
+    FindOutputDirectory,
+    OpenInFileViewer,
+
+    StatusTimerDone,
+    StatusTimerError,
 
     AddPlacement,
     RemovePlacement,
@@ -103,7 +115,20 @@ pub enum TeamTotalsMessage {
 fn get_directory(input: String, settings: &Settings) -> Result<String, ErrorKind> {
     let result;
     if settings.use_event_name_for_results_path {
-        let path_string = format!("{}{}{}", settings.isu_calc_base_directory, input, settings.html_relative_directory).replace("\r", "").replace("\n", "");
+
+        let isu_calc_base_directory = if !settings.isu_calc_base_directory.ends_with("/") && !settings.isu_calc_base_directory.ends_with("\\") {
+            format!("{}{}", settings.isu_calc_base_directory, "/")
+        } else {
+            settings.isu_calc_base_directory.clone()
+        };
+
+        let html_relative_directory = if !settings.html_relative_directory.starts_with("/") && !settings.html_relative_directory.starts_with("\\") {
+            format!("{}{}", "/", settings.html_relative_directory)
+        } else {
+            settings.html_relative_directory.clone()
+        };
+
+        let path_string = format!("{}{}{}", isu_calc_base_directory, input, html_relative_directory).replace("\r", "").replace("\n", "");
         let path = Path::new(path_string.as_str());
 
         if path.is_dir() {
@@ -147,6 +172,26 @@ fn calculate(events: Vec<Event>, settings: &Settings) -> String {
 }
 
 impl TeamTotalsGui {
+    fn start_status_timer(&mut self) {
+        match &mut self.status_timer {
+            None => {
+                self.status_timer = Some(Timer::new(5000, 1));
+            }
+            Some(timer) => {
+                timer.stop();
+                self.status_timer = Some(Timer::new(5000, 1));
+            }
+        }
+
+
+        match &mut self.status_timer {
+            None => {}
+            Some(ref mut v) => {
+                v.start();
+            }
+        }
+    }
+
     fn apply_points_for_each_placement(&mut self, value: String, index: usize) {
         match str::parse::<f64>(value.as_str()) {
             Ok(_) => {
@@ -194,6 +239,7 @@ impl Application for TeamTotalsGui {
         let settings = Settings::read();
 
         let (path_sender, path_receiver) = mpsc::channel::<PathBuf>();
+        let (output_path_sender, output_path_receiver) = mpsc::channel::<PathBuf>();
         let (event_names_sender, event_names_receiver) = mpsc::channel::<(Vec<Event>, String)>();
         let (results_sender, results_receiver) = mpsc::channel::<String>();
 
@@ -205,6 +251,8 @@ impl Application for TeamTotalsGui {
             font_size: settings.xlsx_font_size.to_string(),
             points_for_each_placement: vec![],
             competition_directory_sender: path_sender,
+            output_directory_sender: output_path_sender,
+            output_directory_receiver: RefCell::new(Some(output_path_receiver)),
             competition_directory_receiver: RefCell::new(Some(path_receiver)),
             event_names_receiver: RefCell::new(Some(event_names_receiver)),
             event_names_sender,
@@ -214,11 +262,28 @@ impl Application for TeamTotalsGui {
             event_controls: vec![],
             last_checkbox: -1,
             is_shift_down: false,
+            status_timer: None,
         };
 
         let mut commands = vec![];
 
-        let (raw_icon, width, height) = png_to_rgba("./assets/icon.png");
+        let icon_bytes = include_bytes!("icon.png");
+        let binding = appdata("/assets");
+        let binding = binding.0.as_str();
+        let icon_path = Path::new(binding);
+        if !icon_path.exists() {
+            fs::create_dir_all(icon_path).unwrap();
+        }
+
+        let binding = appdata("/assets/icon.png");
+        let binding = binding.0.as_str();
+        let icon_path = Path::new(binding);
+
+        if !icon_path.exists() {
+            fs::write(icon_path, icon_bytes).unwrap();
+        }
+
+        let (raw_icon, width, height) = png_to_rgba(icon_path.to_str().unwrap());
         let icon = window::change_icon(icon::from_rgba(raw_icon, width, height).unwrap());
 
         commands.push(icon);
@@ -262,6 +327,7 @@ impl Application for TeamTotalsGui {
                     EventsControls::new(i, event.clone())
                 }).collect::<Vec<EventsControls>>();
                 self.status = status;
+                //self.start_status_timer();
 
                 Command::none()
             }
@@ -362,18 +428,18 @@ impl Application for TeamTotalsGui {
                 }
             }
             TeamTotalsMessage::Find => {
-                    let sender = self.competition_directory_sender.clone();
+                let sender = self.competition_directory_sender.clone();
 
-                    let base_directory = self.settings.isu_calc_base_directory.clone();
+                let base_directory = self.settings.isu_calc_base_directory.clone();
 
-                    thread::spawn(move || {
-                        let directory = FileDialog::new()
-                            .set_location(base_directory.as_str())
-                            .show_open_single_dir()
-                            .unwrap().unwrap();
+                thread::spawn(move || {
+                    let directory = FileDialog::new()
+                        .set_location(base_directory.as_str())
+                        .show_open_single_dir()
+                        .unwrap().unwrap();
 
-                            sender.send(directory).unwrap();
-                    });
+                        sender.send(directory).unwrap();
+                });
 
                 Command::none()
             }
@@ -426,6 +492,7 @@ impl Application for TeamTotalsGui {
 
             TeamTotalsMessage::ResultsRetrieved(status) => {
                 self.status = status;
+                //self.start_status_timer();
 
                 Command::none()
             }
@@ -438,6 +505,49 @@ impl Application for TeamTotalsGui {
             TeamTotalsMessage::ShiftReleased => {
                 self.is_shift_down = false;
 
+                Command::none()
+            }
+            TeamTotalsMessage::FindOutputDirectory => {
+                let sender = self.output_directory_sender.clone();
+
+                let output_directory = self.settings.output_directory.clone();
+
+                thread::spawn(move || {
+                    let directory = FileDialog::new()
+                        .set_location(output_directory.as_str())
+                        .show_open_single_dir()
+                        .unwrap().unwrap();
+
+                    sender.send(directory).unwrap();
+                });
+
+                Command::none()
+            }
+            TeamTotalsMessage::FindOutputDirectoryReceived(directory) => {
+                self.settings.output_directory = directory.to_str().unwrap_or("").to_string().replace("\\", "/");
+                settings_changed = true;
+
+                Command::none()
+            }
+            TeamTotalsMessage::OpenInFileViewer => {
+                println!("{}", &self.settings.output_directory);
+                let directory = self.settings.output_directory.clone();
+                thread::spawn(move || {
+                    match open::that(&directory) {
+                        Ok(_) => {}
+                        Err(_) => {}
+                    }
+                });
+
+                Command::none()
+            }
+            TeamTotalsMessage::StatusTimerDone => {
+                self.status = String::new();
+                self.status_timer = None;
+
+                Command::none()
+            }
+            TeamTotalsMessage::StatusTimerError => {
                 Command::none()
             }
         };
@@ -462,7 +572,7 @@ impl Application for TeamTotalsGui {
 
         let competition_input_row = row!(competition_input, find_button).width(iced::Length::Fill);
 
-        let retrieve_data_button = Button::new("Retrieve Data").on_press(TeamTotalsMessage::RetrieveResults).width(130);
+        let retrieve_data_button = Button::new("Retrieve Data").on_press(TeamTotalsMessage::RetrieveResults).width(140);
 
         let mut can_calculate = false;
 
@@ -474,9 +584,9 @@ impl Application for TeamTotalsGui {
         }
 
         let calculate_button = if can_calculate {
-            Button::new("Tabulate Results").on_press(TeamTotalsMessage::CalculateResults).width(130)
+            Button::new("Tabulate Results").on_press(TeamTotalsMessage::CalculateResults).width(140)
         } else {
-            Button::new("Tabulate Results").width(130)
+            Button::new("Tabulate Results").width(140)
         };
 
         let calculate_button_row = row![retrieve_data_button, horizontal_space(10), calculate_button, horizontal_space(10), text(&self.status)].align_items(Alignment::Center);
@@ -500,10 +610,15 @@ impl Application for TeamTotalsGui {
 
         let loaded_events_scrollable = scrollable(loaded_events_column).width(iced::Length::Fill);
 
+        let open_output_directory_button = Button::new("Open Output Directory in File Viewer...").on_press(TeamTotalsMessage::OpenInFileViewer).width(290);
+        let open_output_directory_row = row!(open_output_directory_button);
+
         let column1 = column![
             competition_input_row,
             vertical_space(10),
             calculate_button_row,
+            vertical_space(10),
+            open_output_directory_row,
             vertical_space(10),
             iced::widget::horizontal_rule(1),
             vertical_space(10),
@@ -527,7 +642,8 @@ impl Application for TeamTotalsGui {
         let html_relative_directory_column = column![text("HTML Relative Directory"), vertical_space(1), html_relative_directory];
 
         let output_directory = text_input("", &self.settings.output_directory).on_input(OutputDirectory);
-        let output_directory_column = column![text("Output Directory"), vertical_space(1), output_directory];
+        let output_directory_button = Button::new("...").on_press(TeamTotalsMessage::FindOutputDirectory).width(20);
+        let output_directory_column = column![text("Output Directory"), vertical_space(1), row![output_directory, output_directory_button], vertical_space(5)];
 
         let xlsx_file_name = text_input("", &self.settings.xlsx_file_name).on_input(XLSXFileName);
         let xlsx_file_name_column = column![text("Excel File Name"), vertical_space(1), xlsx_file_name];
@@ -589,7 +705,7 @@ impl Application for TeamTotalsGui {
 
         column2 = column2.push(add_remove_placement_row);
 
-        let scroll_pane = Scrollable::new(column2).width(iced::Length::FillPortion(2)).id(SCROLLABLE_ID.clone());
+        let scroll_pane = Scrollable::new(column2).width(iced::Length::FillPortion(3)).id(SCROLLABLE_ID.clone());
 
         let row = row![
             scroll_pane,
@@ -652,6 +768,19 @@ impl Application for TeamTotalsGui {
         );
         subscriptions.push(competition_directory);
 
+        let output_directory = iced::subscription::unfold(
+            "output_directory_subscription",
+            self.output_directory_receiver.take(),
+            move |mut receiver| async move {
+                let directory = match receiver.as_mut().unwrap().recv() {
+                    Ok(directory) => directory,
+                    Err(_) => PathBuf::new(),
+                };
+                (TeamTotalsMessage::FindOutputDirectoryReceived(directory), receiver)
+            },
+        );
+        subscriptions.push(output_directory);
+
         let retrieve_events = iced::subscription::unfold(
             "retrieve_events",
             self.event_names_receiver.take(),
@@ -677,6 +806,28 @@ impl Application for TeamTotalsGui {
             },
         );
         subscriptions.push(retrieve_results);
+
+        if self.status_timer.is_some() {
+            let status_timer = iced::subscription::unfold(
+                "status_timer",
+                match &self.status_timer {
+                    None => {panic!()}
+                    Some(v) => {v}
+                }.receiver.take(),
+                move |mut receiver| async move {
+                    match receiver.as_mut().unwrap().recv() {
+                        Ok(_) => {
+                            (TeamTotalsMessage::StatusTimerDone, receiver)
+                        }
+                        Err(err) => {
+                            eprintln!("{}", err);
+                            (TeamTotalsMessage::StatusTimerError, receiver)
+                        }
+                    }
+                },
+            );
+            subscriptions.push(status_timer);
+        }
 
         Subscription::batch(subscriptions)
     }

@@ -269,6 +269,7 @@ impl ResultSet {
 
 fn parse_ijs_event_names(ijs_events: &Vec<String>) -> Vec<Event> {
     let mut event_names = vec![];
+
     for results_file_path in ijs_events {
         let results_file_contents = fs::read_to_string(results_file_path).unwrap();
         let document = Html::parse_document(&results_file_contents);

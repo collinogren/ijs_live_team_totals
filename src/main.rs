@@ -1,3 +1,4 @@
+#![feature(fs_try_exists)]
 /*
 Copyright (c) 2023 Collin Ogren
 
@@ -49,9 +50,11 @@ mod points_field;
 #[path = "ui/image_loader.rs"]
 mod image_loader;
 
+#[path = "ui/timer.rs"]
+mod timer;
+
 fn main() -> Result<(), iced::Error> {
     let mut settings = iced::Settings::default();
     settings.window.size = (1000, 800);
     TeamTotalsGui::run(settings)
-
 }

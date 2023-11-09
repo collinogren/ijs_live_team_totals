@@ -1,21 +1,27 @@
 [package]
+authors = ["Collin Ogren"]
 name = "ijs_live_team_totals"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
 resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-scraper = "0.17.1"
+scraper = "0.18.1"
 toml = "0.8.1"
 serde = "1.0.164"
 serde_derive = "1.0.164"
 text_io = "0.1.12"
-rust_xlsxwriter = "0.52.0"
+rust_xlsxwriter = "0.54.0"
 iced = { git = "https://github.com/iced-rs/iced" }
 async-std = "1.12.0"
-native-dialog = "0.6.4"
+native-dialog = "0.7.0"
 human-sort = "0.2.2"
 once_cell = "1.18.0"
 png = "0.17.10"
+directories = "5.0.1"
+open = "5.0.0"
+
+[build-dependencies]
+winres = "0.1.12"
