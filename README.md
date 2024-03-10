@@ -18,7 +18,7 @@ to build the debug version.
 # TODO
 This software is a work in progress, the current goals for new features include:
 + Implement support for partnered events for IJS and 6.0
-+ Add option to pull HTML data from the internet so as to avoid needing to do a full update in the backroom with an up-to-date database.
++ Add an option to pull HTML data from the internet so as to avoid needing to do a full update in the backroom with an up-to-date database.
 
 # Copyright Information
 This free and open source software is published under the MIT License:
