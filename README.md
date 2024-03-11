@@ -20,6 +20,10 @@ This software is a work in progress, the current goals for new features include:
 + Implement support for partnered events for IJS and 6.0
 + Add an option to pull HTML data from the internet so as to avoid needing to do a full update in the backroom with an up-to-date database.
 
+# Disclaimer
+I do not guarantee the accuracy of this software's output. It is your responsibility to ensure accurate results. If you have any issues, please report them.
+Test results are welcome, if you find calculation inaccuracies, I would greatly appreciate the feedback.
+
 # Copyright Information
 This free and open source software is published under the MIT License:
 
