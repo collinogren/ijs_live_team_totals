@@ -22,6 +22,8 @@ SOFTWARE.
 
 use crate::parser::ClubPoints;
 
+// Quick sort implementation.
+
 pub(crate) fn sort_results(club_points: &mut Vec<ClubPoints>) {
     sort(club_points);
     club_points.reverse();

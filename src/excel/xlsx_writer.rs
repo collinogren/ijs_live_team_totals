@@ -61,7 +61,7 @@ pub fn create_xlsx(club_points: &Vec<ClubPoints>, settings: Settings) {
         worksheet.write_with_format(i as u32 + 1, 4, Formula::new(format!("=SUM(C{}:D{})", i as u32 + 2, i as u32 + 2).as_str()), &text_format).expect(format!("Failed to write total for {}", result.club).as_str());
     }
 
-    let output_path_exists = match fs::try_exists(settings.output_directory.clone()) {
+    let output_path_exists = match fs::exists(settings.output_directory.clone()) {
         Ok(v) => {v}
         Err(err) => {
             eprintln!("Failed to verify the existence of the path output path: {}", err);

@@ -1,4 +1,3 @@
-#![feature(fs_try_exists)]
 /*
 Copyright (c) 2023 Collin Ogren
 
@@ -21,12 +20,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#![windows_subsystem = "windows"]
+//#![windows_subsystem = "windows"]
 
-use iced::Application;
 use crate::gui::TeamTotalsGui;
 
-#[path = "html_utilities/parser.rs"]
+#[path = "html/parser.rs"]
 mod parser;
 
 #[path = "settings/settings.rs"]
@@ -38,8 +36,11 @@ mod terminal_ui;
 #[path = "excel/xlsx_writer.rs"]
 mod xlsx_writer;
 
-#[path = "html_utilities/results_sorter.rs"]
+#[path = "html/results_sorter.rs"]
 mod results_sorter;
+
+#[path = "html/html_writer.rs"]
+mod html_writer;
 
 #[path = "ui/gui.rs"]
 mod gui;
@@ -54,7 +55,8 @@ mod image_loader;
 mod timer;
 
 fn main() -> Result<(), iced::Error> {
-    let mut settings = iced::Settings::default();
-    settings.window.size = (1000, 800);
-    TeamTotalsGui::run(settings)
+    iced::application(TeamTotalsGui::title, TeamTotalsGui::update, TeamTotalsGui::view)
+        .subscription(TeamTotalsGui::subscription)
+        .theme(TeamTotalsGui::theme)
+        .run_with(TeamTotalsGui::new)
 }
