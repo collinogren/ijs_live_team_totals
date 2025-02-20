@@ -25,9 +25,10 @@ use std::sync::{Arc, mpsc, RwLock};
 
 use scraper::{CaseSensitivity, Element, ElementRef, Html, Selector};
 use scraper::selector::CssLocalName;
+
 use crate::parser::ScoringSystem::{IJS, SixO};
+use crate::{html_writer, results_sorter};
 use crate::settings::Settings;
-use crate::results_sorter;
 use crate::xlsx_writer;
 
 pub enum State {
@@ -79,7 +80,7 @@ pub fn retrieve_events(path: String) -> (Vec<Event>, String, State) {
         //The protocol sheets seem to be contained in files that start with SEGM
         if file.starts_with("SEGM") {
             files_ijs.write().unwrap().push(String::from(path.clone() + "/" + file.as_str()));
-            continue
+            continue;
         }
     }
 
@@ -127,14 +128,14 @@ pub fn retrieve_events(path: String) -> (Vec<Event>, String, State) {
     event_names = clean_event_names(event_names);
 
     if event_names.len() == 0 {
-        return (event_names, format!("The specified competition exists, but there are no results at this time."), State::Error);
+        return (event_names, "The specified competition exists, but there are no results at this time.".to_string(), State::Error);
     }
 
 
     (event_names, format!("Found {} IJS events and {} 6.0 events.", files_ijs.read().unwrap().len(), files_60.read().unwrap().len()), State::Ok)
 }
 
-pub fn parse_results(events: Vec<Event>, settings: &Settings) -> (String, State) {
+pub fn parse_results(events: Vec<Event>, settings: &Settings, competition_name: &String) -> (String, State) {
     let mut files_ijs = vec![];
     let mut files_60 = vec![];
 
@@ -190,6 +191,10 @@ pub fn parse_results(events: Vec<Event>, settings: &Settings) -> (String, State)
         xlsx_writer::create_xlsx(&results, settings.clone());
     }
 
+    // if generate html
+        html_writer::create_html(&results, settings.clone(), competition_name);
+    // end if
+
     let mut team_totals = vec![];
     for result in results {
         team_totals.push(format!("{}\t{}\t{}", result.club, result.points_ijs, result.points_60));
@@ -219,7 +224,6 @@ const HTML_CHARACTER_ENTITIES: [(&'static str, &'static str); 12] = [
 
 fn clean_event_names(mut event_names: Vec<Event>) -> Vec<Event> {
     for event_name in &mut event_names {
-
         for character_entities in HTML_CHARACTER_ENTITIES {
             let temp = event_name.event_name.replace(character_entities.0, character_entities.1).clone();
             event_name.event_name = temp;
@@ -232,7 +236,7 @@ fn clean_event_names(mut event_names: Vec<Event>) -> Vec<Event> {
 fn clean_club_names(result_sets: &mut Vec<ResultSet>) {
     for result_set in result_sets {
         let name = match &result_set.club {
-            Some(name) => {name}
+            Some(name) => { name }
             None => { continue }
         };
 
@@ -293,7 +297,7 @@ fn parse_ijs_event_names(ijs_events: &Vec<String>) -> Vec<Event> {
                 };
 
                 event_names.push(Event::new(event_name, results_file_path.clone(), IJS, true));
-                continue
+                continue;
             }
         }
     }
@@ -407,7 +411,7 @@ pub fn parse_60(files_60: Vec<String>) -> Vec<ResultSet> {
             let mut result_set = ResultSet::new(SixO);
 
             if element.1.html().contains("<td rowspan=\"1\" colspan=\"1\">") { // Name first this time because the name has more distinctive markings for it in the HTML.
-                let temp_club =                     String::from(element.1.html()
+                let temp_club = String::from(element.1.html()
                     .split("<td rowspan=\"1\" colspan=\"1\">")
                     .nth(1)
                     .unwrap()
@@ -426,7 +430,7 @@ pub fn parse_60(files_60: Vec<String>) -> Vec<ResultSet> {
 
                 has_name = true;
             } else if element.1.html().contains("<td colspan=\"1\" rowspan=\"1\">") { // Name first this time because the name has more distinctive markings for it in the HTML.
-                let temp_club =                     String::from(element.1.html()
+                let temp_club = String::from(element.1.html()
                     .split("<td colspan=\"1\" rowspan=\"1\">")
                     .nth(1)
                     .unwrap()
@@ -506,7 +510,7 @@ pub fn sum_results(results_sets: Vec<ResultSet>, settings: Settings) -> Vec<Club
         for club_points in &club_points_vec {
             if club_points.club.eq(&results_set.club.clone().unwrap()) {
                 club_exists = true;
-                break
+                break;
             }
         }
 
@@ -525,7 +529,7 @@ pub fn sum_results(results_sets: Vec<ResultSet>, settings: Settings) -> Vec<Club
                     }
                 }
 
-                continue
+                continue;
             }
         }
     }

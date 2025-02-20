@@ -23,13 +23,14 @@ SOFTWARE.
 use std::io::{ErrorKind};
 use std::path::{Path, PathBuf};
 use std::{fs, thread, vec};
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use iced::{Alignment, Element, keyboard, Subscription, Task, Theme, widget, window};
 use iced::alignment::Vertical;
 use iced::keyboard::key::Named;
 use iced::widget::{Button, Checkbox, horizontal_space, row, column, text_input, vertical_space, vertical_rule, text, Scrollable, keyed_column, container, scrollable, checkbox};
 use iced::widget::scrollable::{RelativeOffset};
-use iced::window::icon;
+use iced::window::{icon, Id};
 use native_dialog::FileDialog;
 use once_cell::sync::Lazy;
 use crate::image_loader::png_to_rgba;
@@ -57,8 +58,10 @@ pub struct TeamTotalsGui {
     event_controls: Vec<EventsControls>,
     last_checkbox: isize,
     is_shift_down: bool,
+    fullscreen: bool,
 
     status_timer: Option<Timer>,
+    main_window_id: Id,
 }
 
 #[derive(Debug, Clone)]
@@ -94,7 +97,9 @@ pub enum TeamTotalsMessage {
     RemovePlacement,
     ShiftPressed,
     ShiftReleased,
+    F11Released,
 }
+
 
 fn get_directory(input: String, settings: &Settings) -> Result<String, ErrorKind> {
     let result;
@@ -150,8 +155,8 @@ fn retrieve_events(competition: String, settings: Settings) -> (Vec<Event>, Stri
     }
 }
 
-fn calculate(events: Vec<Event>, settings: &Settings) -> String {
-    let result = parser::parse_results(events, settings);
+fn calculate(events: Vec<Event>, settings: &Settings, competition_name: &String) -> String {
+    let result = parser::parse_results(events, settings, competition_name);
     String::from(result.0)
 }
 
@@ -190,6 +195,8 @@ impl TeamTotalsGui {
     }
 }
 
+const MAIN_WINDOW_KEY: &'static str = "MAIN_WINDOW";
+
 impl TeamTotalsGui {
     pub fn new() -> (Self, Task<TeamTotalsMessage>) {
         let (id, _open) = window::open(window::Settings::default());
@@ -207,9 +214,10 @@ impl TeamTotalsGui {
             event_controls: vec![],
             last_checkbox: -1,
             is_shift_down: false,
+            fullscreen: false,
             status_timer: None,
+            main_window_id: id,
         };
-
 
         let icon_bytes = include_bytes!("icon.png");
         let binding = appdata("/assets");
@@ -425,9 +433,10 @@ impl TeamTotalsGui {
             TeamTotalsMessage::CalculateResults => {
                 let events = self.events.clone();
                 let settings = self.settings.clone();
+                let competition_name = self.competition.clone();
 
                 Task::perform(async move {
-                    calculate(events, &settings)
+                    calculate(events, &settings, &competition_name)
                 }, TeamTotalsMessage::ResultsRetrieved)
             }
 
@@ -482,6 +491,17 @@ impl TeamTotalsGui {
                 });
 
                 Task::none()
+            }
+            TeamTotalsMessage::F11Released => {
+                let task = if self.fullscreen {
+                    window::get_latest().and_then(move |window| window::change_mode(window, window::Mode::Windowed))
+                } else {
+                    window::get_latest().and_then(move |window| window::change_mode(window, window::Mode::Fullscreen))
+                };
+
+                self.fullscreen = !self.fullscreen;
+
+                task
             }
         };
 
@@ -684,6 +704,14 @@ impl TeamTotalsGui {
 
         subscriptions.push(shift_down);
         subscriptions.push(shift_up);
+
+        let f11_up= keyboard::on_key_release(|key_code, modifiers| {
+            match (key_code, modifiers) {
+                (keyboard::Key::Named(Named::F11), _) => Some(TeamTotalsMessage::F11Released),
+                _ => None,
+            }
+        });
+        subscriptions.push(f11_up);
 
         Subscription::batch(subscriptions)
     }
