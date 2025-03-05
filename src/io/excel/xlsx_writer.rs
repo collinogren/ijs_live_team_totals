@@ -24,6 +24,7 @@ use std::fs;
 use std::path::Path;
 use rust_xlsxwriter;
 use rust_xlsxwriter::{ColNum, Format, FormatAlign, Formula, Workbook};
+use crate::file_utils;
 use crate::parser::ClubPoints;
 use crate::settings::Settings;
 
@@ -55,31 +56,13 @@ pub fn create_xlsx(club_points: &Vec<ClubPoints>, settings: Settings) {
 
     for (i, result) in club_points.iter().enumerate() {
         worksheet.write_with_format(i as u32 + 1, 0, i as u32 + 1, &text_format).expect("Failed to write the rank");
-        worksheet.write_with_format(i as u32 + 1, 1, &result.club, &text_format).expect(format!("Failed to write club name for {}", result.club).as_str());
-        worksheet.write_with_format(i as u32 + 1, 2, result.points_ijs, &text_format).expect(format!("Failed to write IJS score for {}", result.club).as_str());
-        worksheet.write_with_format(i as u32 + 1, 3, result.points_60, &text_format).expect(format!("Failed to write 6.0 score for {}", result.club).as_str());
-        worksheet.write_with_format(i as u32 + 1, 4, Formula::new(format!("=SUM(C{}:D{})", i as u32 + 2, i as u32 + 2).as_str()), &text_format).expect(format!("Failed to write total for {}", result.club).as_str());
+        worksheet.write_with_format(i as u32 + 1, 1, result.club(), &text_format).expect(format!("Failed to write club name for {}", result.club()).as_str());
+        worksheet.write_with_format(i as u32 + 1, 2, result.points_ijs(), &text_format).expect(format!("Failed to write IJS score for {}", result.club()).as_str());
+        worksheet.write_with_format(i as u32 + 1, 3, result.points_60(), &text_format).expect(format!("Failed to write 6.0 score for {}", result.club()).as_str());
+        worksheet.write_with_format(i as u32 + 1, 4, Formula::new(format!("=SUM(C{}:D{})", i as u32 + 2, i as u32 + 2).as_str()), &text_format).expect(format!("Failed to write total for {}", result.club()).as_str());
     }
 
-    let output_path_exists = match fs::exists(settings.output_directory.clone()) {
-        Ok(v) => {v}
-        Err(err) => {
-            eprintln!("Failed to verify the existence of the path output path: {}", err);
-            return;
-        }
-    };
-
-    if !output_path_exists {
-        match fs::create_dir_all(settings.output_directory.clone()) {
-            Ok(_) => {
-                println!("Successfully wrote output directory");
-            }
-            Err(err) => {
-                eprintln!("Failed to write output directory: {}", err);
-                return;
-            }
-        };
-    }
+    file_utils::check_and_create_dir(&settings.output_directory);
 
     let path = settings.xlsx_path();
 

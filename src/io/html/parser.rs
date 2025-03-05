@@ -22,7 +22,7 @@ SOFTWARE.
 
 use std::{fs, thread};
 use std::sync::{Arc, mpsc, RwLock};
-
+use indexmap::IndexMap;
 use scraper::{CaseSensitivity, Element, ElementRef, Html, Selector};
 use scraper::selector::CssLocalName;
 
@@ -131,11 +131,10 @@ pub fn retrieve_events(path: String) -> (Vec<Event>, String, State) {
         return (event_names, "The specified competition exists, but there are no results at this time.".to_string(), State::Error);
     }
 
-
     (event_names, format!("Found {} IJS events and {} 6.0 events.", files_ijs.read().unwrap().len(), files_60.read().unwrap().len()), State::Ok)
 }
 
-pub fn parse_results(events: Vec<Event>, settings: &Settings, competition_name: &String) -> (String, State) {
+pub fn parse_results(events: Vec<Event>, settings: &Settings, competition_name: &String) -> (Vec<ClubPoints>, String, State) {
     let mut files_ijs = vec![];
     let mut files_60 = vec![];
 
@@ -187,24 +186,7 @@ pub fn parse_results(events: Vec<Event>, settings: &Settings, competition_name: 
 
     results_sorter::sort_results(&mut results);
 
-    if settings.generate_xlsx {
-        xlsx_writer::create_xlsx(&results, settings.clone());
-    }
-
-    // if generate html
-        html_writer::create_html(&results, settings.clone(), competition_name);
-    // end if
-
-    let mut team_totals = vec![];
-    for result in results {
-        team_totals.push(format!("{}\t{}\t{}", result.club, result.points_ijs, result.points_60));
-    }
-
-    if settings.generate_txt {
-        fs::write(settings.txt_path(), team_totals.join("\n")).unwrap();
-    }
-
-    (String::from("Results Successfully Calculated"), State::Ok)
+    (results, String::from("Results Successfully Calculated"), State::Ok)
 }
 
 const HTML_CHARACTER_ENTITIES: [(&'static str, &'static str); 12] = [
@@ -480,11 +462,11 @@ pub fn parse_60(files_60: Vec<String>) -> Vec<ResultSet> {
     results
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ClubPoints {
-    pub(crate) club: String,
-    pub(crate) points_ijs: f64,
-    pub(crate) points_60: f64,
+    club: String,
+    points_ijs: f64,
+    points_60: f64,
 }
 
 impl ClubPoints {
@@ -494,6 +476,30 @@ impl ClubPoints {
             points_ijs: 0.0,
             points_60: 0.0,
         }
+    }
+
+    pub fn club(&self) -> &String {
+        &self.club
+    }
+
+    pub fn points_ijs(&self) -> f64 {
+        self.points_ijs
+    }
+
+    pub fn points_60(&self) -> f64 {
+        self.points_60
+    }
+
+    pub fn set_club(&mut self, club: String) {
+        self.club = club;
+    }
+
+    pub fn set_points_ijs(&mut self, points_ijs: f64) {
+        self.points_ijs = points_ijs;
+    }
+
+    pub fn set_points_60(&mut self, points_60: f64) {
+        self.points_60 = points_60;
     }
 
     pub fn calc_total(&self) -> f64 {

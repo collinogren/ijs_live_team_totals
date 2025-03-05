@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/ijs_live_team_totals.iml" filepath="$PROJECT_DIR$/ijs_live_team_totals.iml" />
+      <module fileurl="file://$PROJECT_DIR$/auto_team_totals.iml" filepath="$PROJECT_DIR$/auto_team_totals.iml" />
     </modules>
   </component>
 </project>

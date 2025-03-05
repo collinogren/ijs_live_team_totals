@@ -1,6 +1,6 @@
 [package]
 authors = ["Collin Ogren"]
-name = "ijs_live_team_totals"
+name = "auto_team_totals"
 version = "0.6.0"
 edition = "2021"
 resolver = "2"
@@ -8,7 +8,7 @@ resolver = "2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-scraper = "0.22.0"
+scraper = "0.23.1"
 toml = "0.8.19"
 serde = "1.0.217"
 serde_derive = "1.0.217"
@@ -25,6 +25,7 @@ png = "0.17.16"
 directories = "6.0.0"
 open = "5.3.1"
 reqwest = "0.12.11"
+indexmap = "2.7.1"
 
 [build-dependencies]
 winres = "0.1.12"

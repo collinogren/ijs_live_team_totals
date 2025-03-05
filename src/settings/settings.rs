@@ -28,7 +28,7 @@ use serde_derive::{Deserialize, Serialize};
 const SETTINGS_FILE: &'static str = "/settings.toml";
 
 pub fn appdata(relative: &str) -> (String, String) {
-    match ProjectDirs::from("", "",  "IJSLive Team Totals") {
+    match ProjectDirs::from("", "",  "Auto Team Totals") {
         Some(v) => (format!("{}{}", v.config_dir().to_string_lossy().replace("\\", "/"), relative), v.config_dir().to_string_lossy().replace("\\", "/")),
         None => (String::new(), String::new()),
     }
@@ -40,7 +40,7 @@ pub fn documents() -> String {
         Some(user_dirs) => {
             match user_dirs.document_dir() {
                 None => {String::new()}
-                Some(v) => {format!("{}{}", v.to_string_lossy().replace("\\", "/"), "/IJSLive Team Totals")}
+                Some(v) => {format!("{}{}", v.to_string_lossy().replace("\\", "/"), "/Auto Team Totals")}
             }
         }
     }
@@ -53,14 +53,14 @@ pub struct Settings {
     pub(crate) include_60: bool,
     pub(crate) include_ijs: bool,
     pub(crate) generate_xlsx: bool,
-    pub(crate) generate_txt: bool,
+    pub(crate) generate_html: bool,
     pub(crate) attempt_automatic_60_club_name_recombination: bool,
     pub(crate) use_event_name_for_results_path: bool, //If this is set to true, then the program will find the results based on event name rather than absolute path.
     pub(crate) isu_calc_base_directory: String,
     pub(crate) html_relative_directory: String,
     pub(crate) output_directory: String,
     pub(crate) xlsx_file_name: String,
-    pub(crate) txt_file_name: String,
+    pub(crate) html_file_name: String,
     pub(crate) xlsx_header_cell_values: Vec<String>,
     pub(crate) xlsx_column_widths: Vec<i32>,
     pub(crate) xlsx_font_size: u32,
@@ -73,14 +73,14 @@ impl Default for Settings {
             include_60: true,
             include_ijs: true,
             generate_xlsx: true,
-            generate_txt: false,
+            generate_html: true,
             attempt_automatic_60_club_name_recombination: true,
             use_event_name_for_results_path: true,
             isu_calc_base_directory: String::from("C:/ISUCalcFS/"),
             html_relative_directory: String::from("/IJScompanion_html_winnercomm"),
             output_directory: documents(),
             xlsx_file_name: String::from("team_totals.xlsx"),
-            txt_file_name: String::from("team_totals.txt"),
+            html_file_name: String::from("team_totals.html"),
             xlsx_header_cell_values: vec![String::from("Rank"), String::from("Club"), String::from("IJS"), String::from("6.0"), String::from("Total")],
             xlsx_column_widths: vec![15, 100, 11, 11, 15],
             xlsx_font_size: 32,
@@ -95,7 +95,7 @@ impl Settings {
         include_60: bool,
         include_ijs: bool,
         generate_xlsx: bool,
-        generate_txt: bool,
+        generate_html: bool,
         participant_quantity_exclusion_point: u64,
         attempt_automatic_60_club_name_recombination: bool,
         use_event_name_for_results_path: bool,
@@ -103,7 +103,7 @@ impl Settings {
         html_relative_directory: String,
         output_directory: String,
         xlsx_file_name: String,
-        txt_file_name: String,
+        html_file_name: String,
         xlsx_header_cell_values: Vec<String>,
         xlsx_column_widths: Vec<i32>,
         xlsx_font_size: u32,
@@ -113,14 +113,14 @@ impl Settings {
             include_60,
             include_ijs,
             generate_xlsx,
-            generate_txt,
+            generate_html,
             attempt_automatic_60_club_name_recombination,
             use_event_name_for_results_path,
             isu_calc_base_directory,
             html_relative_directory,
             output_directory,
             xlsx_file_name,
-            txt_file_name,
+            html_file_name,
             xlsx_header_cell_values,
             xlsx_column_widths,
             xlsx_font_size,
@@ -134,13 +134,10 @@ impl Settings {
                 Ok(_) => {}
                 Err(err) => eprintln!("Failed to create settings directory at {}: {}", settings_dir, err),
             };
-            let toml = match toml::to_string(&Settings::default()) {
-                Ok(v) => v,
-                Err(err) => {
-                    eprintln!("Failed to serialize default settings.toml file: {}", err);
-                    format!("Failed to serialize default settings.toml file: {}", err)
-                }
-            };
+            let toml = toml::to_string(&Settings::default()).unwrap_or_else(|err| {
+                eprintln!("Failed to serialize default settings.toml file: {}", err);
+                format!("Failed to serialize default settings.toml file: {}", err)
+            });
             match fs::write(settings_file.clone(), toml) {
                 Ok(_) => {}
                 Err(err) => eprintln!("Failed to write to settings.toml file: {}", err),
@@ -154,13 +151,10 @@ impl Settings {
             }
         };
 
-        let settings: Settings = match toml::from_str(&contents) {
-            Ok(s) => s,
-            Err(err) => {
-                eprintln!("Failed to read settings file: {}\nUsing default values.", err);
-                Settings::default()
-            }
-        };
+        let settings: Settings = toml::from_str(&contents).unwrap_or_else(|err| {
+            eprintln!("Failed to read settings file: {}\nUsing default values.", err);
+            Settings::default()
+        });
 
         settings
     }
@@ -190,6 +184,6 @@ impl Settings {
     }
 
     pub fn txt_path(&self) -> String {
-        self.output_directory.clone() + "/" + self.txt_file_name.as_str()
+        self.output_directory.clone() + "/" + self.html_file_name.as_str()
     }
 }

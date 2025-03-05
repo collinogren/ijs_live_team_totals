@@ -24,7 +24,7 @@ SOFTWARE.
 
 use crate::gui::TeamTotalsGui;
 
-#[path = "html/parser.rs"]
+#[path = "io/html/parser.rs"]
 mod parser;
 
 #[path = "settings/settings.rs"]
@@ -33,13 +33,13 @@ mod settings;
 #[path = "ui/terminal_ui.rs"]
 mod terminal_ui;
 
-#[path = "excel/xlsx_writer.rs"]
+#[path = "io/excel/xlsx_writer.rs"]
 mod xlsx_writer;
 
-#[path = "html/results_sorter.rs"]
+#[path = "io/html/results_sorter.rs"]
 mod results_sorter;
 
-#[path = "html/html_writer.rs"]
+#[path = "io/html/html_writer.rs"]
 mod html_writer;
 
 #[path = "ui/gui.rs"]
@@ -53,6 +53,9 @@ mod image_loader;
 
 #[path = "ui/timer.rs"]
 mod timer;
+
+#[path = "io/file_utils.rs"]
+mod file_utils;
 
 fn main() -> Result<(), iced::Error> {
     iced::application(TeamTotalsGui::title, TeamTotalsGui::update, TeamTotalsGui::view)
