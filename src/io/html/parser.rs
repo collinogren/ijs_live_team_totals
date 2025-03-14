@@ -22,14 +22,12 @@ SOFTWARE.
 
 use std::{fs, thread};
 use std::sync::{Arc, mpsc, RwLock};
-use indexmap::IndexMap;
 use scraper::{CaseSensitivity, Element, ElementRef, Html, Selector};
 use scraper::selector::CssLocalName;
 
 use crate::parser::ScoringSystem::{IJS, SixO};
-use crate::{html_writer, results_sorter};
+use crate::{results_sorter};
 use crate::settings::Settings;
-use crate::xlsx_writer;
 
 pub enum State {
     Ok,
