@@ -22,40 +22,12 @@ SOFTWARE.
 
 //#![windows_subsystem = "windows"]
 
-use crate::gui::TeamTotalsGui;
+use crate::ui::gui::TeamTotalsGui;
 
-#[path = "io/html/parser.rs"]
-mod parser;
-
-#[path = "settings/settings.rs"]
+mod io;
 mod settings;
 
-#[path = "ui/terminal_ui.rs"]
-mod terminal_ui;
-
-#[path = "io/excel/xlsx_writer.rs"]
-mod xlsx_writer;
-
-#[path = "io/html/results_sorter.rs"]
-mod results_sorter;
-
-#[path = "io/html/html_writer.rs"]
-mod html_writer;
-
-#[path = "ui/gui.rs"]
-mod gui;
-
-#[path = "ui/points_field.rs"]
-mod points_field;
-
-#[path = "ui/image_loader.rs"]
-mod image_loader;
-
-#[path = "ui/timer.rs"]
-mod timer;
-
-#[path = "io/file_utils.rs"]
-mod file_utils;
+mod ui;
 
 fn main() -> Result<(), iced::Error> {
     iced::application(TeamTotalsGui::title, TeamTotalsGui::update, TeamTotalsGui::view)

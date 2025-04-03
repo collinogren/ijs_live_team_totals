@@ -27,6 +27,7 @@ use serde_derive::{Deserialize, Serialize};
 
 const SETTINGS_FILE: &'static str = "/settings.toml";
 
+// Return appdata directory.
 pub fn appdata(relative: &str) -> (String, String) {
     match ProjectDirs::from("", "",  "Auto Team Totals") {
         Some(v) => (format!("{}{}", v.config_dir().to_string_lossy().replace("\\", "/"), relative), v.config_dir().to_string_lossy().replace("\\", "/")),
@@ -34,6 +35,7 @@ pub fn appdata(relative: &str) -> (String, String) {
     }
 }
 
+// Return documents directory.
 pub fn documents() -> String {
     match UserDirs::new() {
         None => {String::new()}
@@ -46,10 +48,11 @@ pub fn documents() -> String {
     }
 }
 
+// Serializable struct to store all permanent program settings.
 #[derive(Clone)]
 #[derive(Serialize, Deserialize)]
 pub struct Settings {
-    pub(crate) points_for_each_placement: Vec<f64>,
+    pub(crate) default_points_system: Vec<f64>,
     pub(crate) include_60: bool,
     pub(crate) include_ijs: bool,
     pub(crate) generate_xlsx: bool,
@@ -66,10 +69,11 @@ pub struct Settings {
     pub(crate) xlsx_font_size: u32,
 }
 
+// Default settings
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            points_for_each_placement: vec![3.0, 2.0, 1.0],
+            default_points_system: vec![3.0, 2.0, 1.0],
             include_60: true,
             include_ijs: true,
             generate_xlsx: true,
@@ -87,9 +91,8 @@ impl Default for Settings {
         }
     }
 }
-
-impl Settings {
-    #[allow(unused)]
+ impl Settings {
+     #[allow(unused)]
     pub fn new(
         points_for_each_placement: Vec<f64>,
         include_60: bool,
@@ -109,7 +112,7 @@ impl Settings {
         xlsx_font_size: u32,
     ) -> Self {
         Settings {
-            points_for_each_placement,
+            default_points_system: points_for_each_placement,
             include_60,
             include_ijs,
             generate_xlsx,
@@ -127,6 +130,8 @@ impl Settings {
         }
     }
 
+     // Read all settings from file. If no file exists, the file will be created and the default
+     // settings will be used and written to the new file.
     pub fn read() -> Self {
         let (settings_file, settings_dir) = appdata(SETTINGS_FILE);
         if !Path::new(settings_file.as_str()).exists() {
@@ -159,6 +164,7 @@ impl Settings {
         settings
     }
 
+     // Write the TOML file from the serializable struct.
     pub fn write(&self) {
         let (settings_file, _settings_dir) = appdata(SETTINGS_FILE);
         let toml = match toml::to_string(self) {
@@ -181,9 +187,5 @@ impl Settings {
 
     pub fn xlsx_path(&self) -> String {
         self.output_directory.clone() + "/" + self.xlsx_file_name.as_str()
-    }
-
-    pub fn txt_path(&self) -> String {
-        self.output_directory.clone() + "/" + self.html_file_name.as_str()
     }
 }

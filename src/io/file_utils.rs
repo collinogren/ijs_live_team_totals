@@ -1,8 +1,9 @@
 use std::fs;
-use std::path::{Path, PathBuf};
-use crate::parser::ClubPoints;
-use crate::settings::Settings;
-use crate::{html_writer, xlsx_writer};
+use std::path::{Path};
+use crate::io::excel::xlsx_writer;
+use crate::io::html::club_points::ClubPoints;
+use crate::io::html::html_writer;
+use crate::settings::settings::Settings;
 
 pub fn check_and_create_dir(path: &String) -> bool {
     match Path::new(path).exists() {

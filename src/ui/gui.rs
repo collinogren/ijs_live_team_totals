@@ -28,19 +28,28 @@ use std::path::{Path, PathBuf};
 use iced::{Alignment, Element, keyboard, Renderer, Subscription, Task, Theme, widget, window};
 use iced::alignment::Vertical;
 use iced::keyboard::key::Named;
-use iced::widget::{Button, Checkbox, checkbox, column, Column, container, horizontal_space, keyed_column, row, Row, Scrollable, scrollable, text, Text, text_input, TextInput, vertical_rule, vertical_space};
+use iced::widget::{Button, Checkbox, column, Column, container, horizontal_space, keyed_column, row, Scrollable, scrollable, text, Text, text_input, vertical_rule, vertical_space};
 use iced::widget::scrollable::RelativeOffset;
-use iced::window::{icon, Id};
+use iced::window::icon;
 use native_dialog::FileDialog;
 use once_cell::sync::Lazy;
-use crate::image_loader::png_to_rgba;
-use crate::{file_utils, main, parser};
-use crate::parser::{ClubPoints, Event, ScoringSystem, State};
-use crate::settings::{appdata, Settings};
-use crate::timer::Timer;
+
+use crate::io::file_utils;
+use crate::io::html::{event, parser};
+use crate::io::html::club_points::ClubPoints;
+use crate::io::html::event::Event;
+use crate::io::html::parser::State;
+use crate::io::html::results_sorter::sort_results;
+use crate::settings::settings::{appdata, Settings};
+use crate::ui::event_checkbox::{EventCheckbox, EventToInclude};
+use crate::ui::gui::TeamTotalsMessage::NoneInput;
+use crate::ui::image_loader::png_to_rgba;
+use crate::ui::text_field::{ClubPointsEdit, ClubPointsField, PointsField, PointsForEachPlacement, TextField};
 
 static COMPETITION_INPUT_ID: Lazy<text_input::Id> = Lazy::new(competition_input_id);
 static SCROLLABLE_ID: Lazy<scrollable::Id> = Lazy::new(scrollable::Id::unique);
+
+const PLACEMENT_WIDTH: f32 = 50.0;
 
 fn competition_input_id() -> text_input::Id {
     text_input::Id::new(String::from("competition_input"))
@@ -49,13 +58,6 @@ fn competition_input_id() -> text_input::Id {
 pub enum Menu {
     MAIN,
     EDIT,
-}
-
-#[derive(Debug, Clone)]
-enum ClubPointsEditType {
-    CLUB,
-    IJS,
-    SIX0,
 }
 
 pub struct TeamTotalsGui {
@@ -67,16 +69,17 @@ pub struct TeamTotalsGui {
     points_for_each_placement: Vec<PointsField>,
 
     events: Vec<Event>,
-    event_controls: Vec<EventsControls>,
+    event_controls: Vec<EventCheckbox>,
     last_checkbox: isize,
     is_shift_down: bool,
     fullscreen: bool,
 
-    main_window_id: Id,
-
     menu: Menu,
 
     club_points: Vec<ClubPoints>,
+    club_name_edits: Vec<ClubPointsField>,
+    club_points_60_edits: Vec<ClubPointsField>,
+    club_points_ijs_edits: Vec<ClubPointsField>,
 }
 
 #[derive(Debug, Clone)]
@@ -115,8 +118,10 @@ pub enum TeamTotalsMessage {
     ToggleEditMode,
     OutputResults,
 
-    // Club, ID, value
-    ClubPointsEdited(String, ClubPointsEditType, String)
+    ClubNameEdited(usize, ClubPointsEdit),
+    ClubPointsIJSEdited(usize, ClubPointsEdit),
+    ClubPoints60Edited(usize, ClubPointsEdit),
+    NoneInput(String),
 }
 
 
@@ -165,7 +170,7 @@ fn retrieve_events(competition: String, settings: Settings) -> (Vec<Event>, Stri
         Err(_) => return (vec![], String::from("No competition found.")), // Should send signal to the user that no path is found.
     };
 
-    let (events, output, state) = parser::retrieve_events(path);
+    let (events, output, state) = event::retrieve_events(path);
 
     match state {
         State::Ok => (events, output),
@@ -182,11 +187,11 @@ impl TeamTotalsGui {
     fn apply_points_for_each_placement(&mut self, value: String, index: usize) {
         match str::parse::<f64>(value.as_str()) {
             Ok(_) => {
-                self.points_for_each_placement[index] = PointsField::new(index, value);
+                self.points_for_each_placement[index] = PointsField::new(index, value, None);
             }
             Err(_) => {
                 if value == "" {
-                    self.points_for_each_placement[index] = PointsField::new(index, value);
+                    self.points_for_each_placement[index] = PointsField::new(index, value, None);
                 } else {
                     return;
                 }
@@ -197,23 +202,21 @@ impl TeamTotalsGui {
     }
 
     fn synchronize_settings_with_gui(&mut self) {
-        self.settings.points_for_each_placement.clear();
+        self.settings.default_points_system.clear();
 
         for points in &self.points_for_each_placement {
-            self.settings.points_for_each_placement.push(str::parse::<f64>(points.value.as_str()).unwrap_or_else(|_| 0.0));
+            self.settings.default_points_system.push(str::parse::<f64>(points.value.as_str()).unwrap_or_else(|_| 0.0));
         }
     }
 
     fn synchronize_gui_with_settings(&mut self) {
         self.points_for_each_placement.clear();
 
-        for (i, points) in self.settings.points_for_each_placement.iter().enumerate() {
-            self.points_for_each_placement.push(PointsField::new(i, format!("{}", points)));
+        for (i, points) in self.settings.default_points_system.iter().enumerate() {
+            self.points_for_each_placement.push(PointsField::new(i, format!("{}", points), None));
         }
     }
 }
-
-const MAIN_WINDOW_KEY: &'static str = "MAIN_WINDOW";
 
 impl TeamTotalsGui {
     pub fn new() -> (Self, Task<TeamTotalsMessage>) {
@@ -233,10 +236,12 @@ impl TeamTotalsGui {
             last_checkbox: -1,
             is_shift_down: false,
             fullscreen: false,
-            main_window_id: id,
             menu: Menu::MAIN,
 
             club_points: vec![],
+            club_name_edits: vec![],
+            club_points_60_edits: vec![],
+            club_points_ijs_edits: vec![],
         };
 
         let icon_bytes = include_bytes!("icon.png");
@@ -272,6 +277,24 @@ impl TeamTotalsGui {
         String::from("Auto Team Totals")
     }
 
+    fn update_edit_inputs(&mut self) {
+        self.club_name_edits.clear();
+        self.club_points_ijs_edits.clear();
+        self.club_points_60_edits.clear();
+
+        for (i, club_point) in self.club_points.iter().enumerate() {
+            self.club_name_edits.push(ClubPointsField::new(i, club_point.club().clone(), Some(iced::Length::FillPortion(3))));
+            self.club_points_ijs_edits.push(ClubPointsField::new(i, match club_point.points_ijs() {
+                Some(value) => { format!("{}", value) }
+                None => { String::new() }
+            }, None));
+            self.club_points_60_edits.push(ClubPointsField::new(i, match club_point.points_60() {
+                Some(value) => { format!("{}", value) }
+                None => { String::new() }
+            }, None));
+        }
+    }
+
     pub fn update(&mut self, message: TeamTotalsMessage) -> Task<TeamTotalsMessage> {
         let mut tasks = vec![];
         let mut settings_changed = false;
@@ -293,8 +316,8 @@ impl TeamTotalsGui {
             TeamTotalsMessage::EventsRetrieved((events, status)) => {
                 self.events = events;
                 self.event_controls = self.events.iter().enumerate().map(|(i, event)| {
-                    EventsControls::new(i, event.clone())
-                }).collect::<Vec<EventsControls>>();
+                    EventCheckbox::new(i, event.clone())
+                }).collect::<Vec<EventCheckbox>>();
                 self.status = status;
                 //self.start_status_timer();
 
@@ -363,7 +386,7 @@ impl TeamTotalsGui {
                 Task::none()
             }
             TeamTotalsMessage::AddPlacement => {
-                self.points_for_each_placement.push(PointsField::new(self.points_for_each_placement.len(), String::from("0")));
+                self.points_for_each_placement.push(PointsField::new(self.points_for_each_placement.len(), String::from("0"), None));
                 self.synchronize_settings_with_gui();
                 settings_changed = true;
                 scrollable::snap_to(SCROLLABLE_ID.clone(), RelativeOffset::END)
@@ -379,6 +402,100 @@ impl TeamTotalsGui {
                     PointsForEachPlacement::Edited(value) => {
                         self.apply_points_for_each_placement(value, i);
                         settings_changed = true;
+                    }
+                }
+
+                Task::none()
+            }
+            TeamTotalsMessage::ClubNameEdited(i, value) => {
+                match value {
+                    ClubPointsEdit::Edited(value) => {
+                        match self.club_points.get_mut(i) {
+                            Some(club_point) => {
+                                club_point.set_club(value);
+                                self.update_edit_inputs();
+                            }
+                            None => {}
+                        }
+                    }
+
+                    ClubPointsEdit::Submitted => {
+                        sort_results(&mut self.club_points);
+                        self.update_edit_inputs();
+                    }
+                }
+
+                Task::none()
+            }
+
+            TeamTotalsMessage::ClubPointsIJSEdited(i, value) => {
+                let last_value = self.club_points.get(i).unwrap().points_ijs();
+                match value {
+                    ClubPointsEdit::Edited(value) => {
+                        match self.club_points.get_mut(i) {
+                            Some(club_point) => {
+                                match value.parse::<f64>() {
+                                    Ok(points) => {
+                                        club_point.set_points_ijs(points);
+                                        self.update_edit_inputs();
+                                    }
+                                    Err(_) => {
+                                        if value.trim().is_empty() {
+                                            club_point.set_points_ijs_none();
+                                        } else {
+                                            club_point.set_points_ijs(last_value.unwrap_or(0.0));
+                                        }
+                                        self.update_edit_inputs();
+                                    }
+                                }
+                            }
+                            None => {}
+                        }
+                    }
+
+                    ClubPointsEdit::Submitted => {
+                        if self.club_points.get(i).unwrap().points_ijs().is_none() {
+                            self.club_points.get_mut(i).unwrap().set_points_ijs(0.0);
+                        }
+                        sort_results(&mut self.club_points);
+                        self.update_edit_inputs();
+                    }
+                }
+
+                Task::none()
+            }
+
+            TeamTotalsMessage::ClubPoints60Edited(i, value) => {
+                let last_value = self.club_points.get(i).unwrap().points_60();
+                match value {
+                    ClubPointsEdit::Edited(value) => {
+                        match self.club_points.get_mut(i) {
+                            Some(club_point) => {
+                                match value.parse::<f64>() {
+                                    Ok(points) => {
+                                        club_point.set_points_60(points);
+                                        self.update_edit_inputs();
+                                    }
+                                    Err(_) => {
+                                        if value.trim().is_empty() {
+                                            club_point.set_points_60_none();
+                                        } else {
+                                            club_point.set_points_60(last_value.unwrap_or(0.0));
+                                        }
+                                        self.update_edit_inputs();
+                                    }
+                                }
+                            }
+                            None => {}
+                        }
+                    }
+
+                    ClubPointsEdit::Submitted => {
+                        if self.club_points.get(i).unwrap().points_60().is_none() {
+                            self.club_points.get_mut(i).unwrap().set_points_60(0.0);
+                        }
+                        sort_results(&mut self.club_points);
+                        self.update_edit_inputs();
                     }
                 }
 
@@ -450,7 +567,7 @@ impl TeamTotalsGui {
                 let competition_name = self.competition.clone();
 
                 Task::perform(async move {
-                    let (club_points, result, status) = calculate(events, &settings, &competition_name);
+                    let (club_points, result, _status) = calculate(events, &settings, &competition_name);
                     (club_points, result)
                 }, TeamTotalsMessage::ResultsRetrieved)
             }
@@ -458,6 +575,8 @@ impl TeamTotalsGui {
             TeamTotalsMessage::ResultsRetrieved((club_points, status)) => {
                 self.status = status;
                 self.club_points = club_points;
+
+                self.update_edit_inputs();
 
                 Task::none()
             }
@@ -520,7 +639,7 @@ impl TeamTotalsGui {
                 task
             }
             TeamTotalsMessage::ToggleEditMode => {
-                match (self.menu) {
+                match self.menu {
                     Menu::MAIN => { self.menu = Menu::EDIT; }
                     Menu::EDIT => { self.menu = Menu::MAIN; }
                 }
@@ -530,14 +649,14 @@ impl TeamTotalsGui {
             TeamTotalsMessage::OutputResults => {
                 if self.club_points.len() > 0 {
                     file_utils::output_files(&self.club_points, &self.settings, &self.competition);
+                    self.status = String::from("Success! Press \"Open Output Directory...\" to view generated files");
                 } else {
                     self.status = String::from("No results available");
                 }
 
                 Task::none()
             }
-            TeamTotalsMessage::ClubPointsEdited(club, id, value) => {
-
+            TeamTotalsMessage::NoneInput(_) => {
                 Task::none()
             }
         };
@@ -656,29 +775,78 @@ impl TeamTotalsGui {
         container(row).center_x(iced::Length::Fill).align_y(Vertical::Top).height(iced::Length::Fill).into()
     }
 
+
     fn edit_menu(&self) -> Element<TeamTotalsMessage> {
         let main_button = Button::new(Text::new("Back").align_x(Alignment::Center)).on_press(TeamTotalsMessage::ToggleEditMode).width(140);
         let mut club_points_column: Column<'_, TeamTotalsMessage, Theme, Renderer> = Column::new();
         club_points_column = club_points_column.push(main_button);
-        club_points_column = club_points_column.push(row![text_input("", "Placement"), text_input("", "Club"), text_input("", "IJS"), text_input("", "6.0"), text_input("", "Point Total")]);
-        for club_points_entry in self.club_points.iter().enumerate() {
-            let (i, club_points_entry) = club_points_entry;
-            let club_points_row = row![
-                text_input("Row", (i as u64).to_string().as_str()),
-                text_input("Club", club_points_entry.club()),
-                text_input("IJS points", club_points_entry.points_ijs().to_string().as_str()),
-                text_input("6.0 points", club_points_entry.points_60().to_string().as_str()),
-                text_input("Point total", club_points_entry.calc_total().to_string().as_str()),
-            ];
+        club_points_column = club_points_column.push(vertical_space().height(10));
+        club_points_column = club_points_column.push(row![
+            text("#").width(iced::Length::Fixed(PLACEMENT_WIDTH)).align_x(Alignment::Center),
+            text("Club").width(iced::Length::FillPortion(3)).align_x(Alignment::Center),
+            text("IJS").width(iced::Length::Fill).align_x(Alignment::Center),
+            text("6.0").width(iced::Length::Fill).align_x(Alignment::Center),
+            text("Point Total").width(iced::Length::Fill).align_x(Alignment::Center)
+        ]);
+        club_points_column = club_points_column.push(vertical_space().height(10));
+        let mut placements_column = Column::new();
+        for i in 1..=self.club_points.len() {
+            placements_column = placements_column.push(text_input("", format!("{}", i).as_str()).on_input(NoneInput).width(iced::Length::Fixed(PLACEMENT_WIDTH)));
+        }
+        let club_edit_column: Element<_> =
+            keyed_column(
+                self.club_name_edits
+                    .iter()
+                    .enumerate()
+                    .map(|(i, club_name_field)| {
+                        (
+                            club_name_field.index,
+                            club_name_field.view(i).map(move |message| {
+                                TeamTotalsMessage::ClubNameEdited(i, message)
+                            }),
+                        )
+                    }),
+            ).into();
+        let club_points_ijs_edit_column: Element<_> =
+            keyed_column(
+                self.club_points_ijs_edits
+                    .iter()
+                    .enumerate()
+                    .map(|(i, points_field)| {
+                        (
+                            points_field.index,
+                            points_field.view(i).map(move |message| {
+                                TeamTotalsMessage::ClubPointsIJSEdited(i, message)
+                            }),
+                        )
+                    }),
+            ).into();
+        let club_points_60_edit_column: Element<_> =
+            keyed_column(
+                self.club_points_60_edits
+                    .iter()
+                    .enumerate()
+                    .map(|(i, points_field)| {
+                        (
+                            points_field.index,
+                            points_field.view(i).map(move |message| {
+                                TeamTotalsMessage::ClubPoints60Edited(i, message)
+                            }),
+                        )
+                    }),
+            ).into();
 
-            club_points_column = club_points_column.push(club_points_row);
+        let mut club_points_total_column = Column::new();
+        for club_point in &self.club_points {
+            club_points_total_column = club_points_total_column.push(text_input("", format!("{}", club_point.calc_total()).as_str()).on_input(NoneInput));
         }
 
+        club_points_column = club_points_column.push(row![placements_column, club_edit_column, club_points_ijs_edit_column, club_points_60_edit_column, club_points_total_column]);
         container(club_points_column).center_x(iced::Length::Fill).align_y(Vertical::Top).height(iced::Length::Fill).into()
     }
 
     pub fn view(&self) -> Element<TeamTotalsMessage> {
-        match (self.menu) {
+        match self.menu {
             Menu::MAIN => { self.main_menu() }
             Menu::EDIT => { self.edit_menu() }
         }
@@ -731,128 +899,4 @@ impl TeamTotalsGui {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum EventToInclude {
-    Edited(bool),
-}
-
-#[derive(Debug, Clone)]
-pub struct EventsControls {
-    pub(crate) index: usize,
-    pub(crate) event: Event,
-}
-
-impl EventsControls {
-    pub fn new(index: usize, event: Event) -> Self {
-        EventsControls {
-            index,
-            event,
-        }
-    }
-
-    pub fn view(&self) -> Element<EventToInclude> {
-        let checkbox = checkbox("", self.event.active).on_toggle(EventToInclude::Edited);
-
-        row![checkbox, text(&self.event.event_name).align_x(Alignment::Center).height(30)].align_y(Alignment::Center).into()
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum PointsForEachPlacement {
-    Edited(String),
-}
-
-trait TextField<T, E> {
-    fn new(id: T, value: String) -> impl TextField<T, E>;
-    fn text_input_id(id: T) -> text_input::Id;
-
-    fn view(&self, id: T) -> Element<E>;
-}
-
-#[derive(Debug, Clone)]
-pub struct PointsField {
-    pub(crate) index: usize,
-    pub(crate) value: String,
-}
-
-impl TextField<usize, PointsForEachPlacement> for PointsField {
-    fn new(index: usize, value: String) -> Self {
-        PointsField {
-            index,
-            value,
-        }
-    }
-
-    fn text_input_id(i: usize) -> text_input::Id {
-        text_input::Id::new(format!("{i}"))
-    }
-
-    fn view(&self, index: usize) -> Element<PointsForEachPlacement> {
-        let points_field = text_input(
-            format!("Points for position {}", index + 1).as_str(),
-            &self.value,
-        ).id(Self::text_input_id(index)).on_input(PointsForEachPlacement::Edited);
-
-        row![text(if index < 9 {format!("  {}: ", index + 1)} else {format!("{}: ", index + 1)}).align_y(Vertical::Center).height(30), points_field].into()
-    }
-}
-
-const CLUB_POINTS_FIELD_ID_TEMPLATE: &'static str = "CLUB_POINTS_FIELD";
-
-
-#[derive(Debug, Clone)]
-struct ClubPointsID {
-    club: String,
-    scoring_system: Option<ScoringSystem>,
-}
-
-impl ClubPointsID {
-    pub fn new(club: String, scoring_system: Option<ScoringSystem>) -> Self {
-        Self {
-            club,
-            scoring_system,
-        }
-    }
-
-    pub fn club(&self) -> &String {
-        &self.club
-    }
-
-    pub fn scoring_system(&self) -> &Option<ScoringSystem> {
-        &self.scoring_system
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ClubPointsField {
-    pub(crate) id: ClubPointsID,
-    pub(crate) value: String,
-}
-
-#[derive(Debug, Clone)]
-enum ClubPointsEdit {
-    Edited(String),
-}
-
-impl TextField<ClubPointsID, ClubPointsEdit> for ClubPointsField {
-    fn new(id: ClubPointsID, value: String) -> Self {
-        ClubPointsField {
-            id,
-            value,
-        }
-    }
-
-    fn text_input_id(id: ClubPointsID) -> text_input::Id {
-        text_input::Id::new(format!("{}#-#{:?}", id.club(), id.scoring_system()))
-    }
-
-    fn view(&self, id: ClubPointsID) -> Element<ClubPointsEdit> {
-        let points_field = text_input(
-            "",
-            &self.value,
-        ).id(Self::text_input_id(id)).on_input(ClubPointsEdit::Edited);
-
-        points_field.into()
-    }
-}
 

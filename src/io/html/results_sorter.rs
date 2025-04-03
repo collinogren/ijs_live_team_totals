@@ -20,9 +20,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use crate::parser::ClubPoints;
-
 // Quick sort implementation.
+
+use crate::io::html::club_points::ClubPoints;
 
 pub(crate) fn sort_results(club_points: &mut Vec<ClubPoints>) {
     sort(club_points);

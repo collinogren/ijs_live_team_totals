@@ -1,7 +1,7 @@
 use std::fs;
-use crate::file_utils;
-use crate::parser::ClubPoints;
-use crate::settings::Settings;
+use crate::io::file_utils;
+use crate::io::html::club_points::ClubPoints;
+use crate::settings::settings::Settings;
 
 pub fn create_html(club_points: &Vec<ClubPoints>, settings: Settings, competition_name: &String) {
     let html = format!(

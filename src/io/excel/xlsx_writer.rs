@@ -20,13 +20,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::fs;
 use std::path::Path;
 use rust_xlsxwriter;
 use rust_xlsxwriter::{ColNum, Format, FormatAlign, Formula, Workbook};
-use crate::file_utils;
-use crate::parser::ClubPoints;
-use crate::settings::Settings;
+use crate::io::file_utils;
+use crate::io::html::club_points::ClubPoints;
+use crate::settings::settings::Settings;
 
 pub fn create_xlsx(club_points: &Vec<ClubPoints>, settings: Settings) {
     let mut workbook = Workbook::new();
