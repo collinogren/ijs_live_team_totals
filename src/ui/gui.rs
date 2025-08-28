@@ -33,7 +33,7 @@ use iced::widget::scrollable::RelativeOffset;
 use iced::window::icon;
 use native_dialog::FileDialog;
 use once_cell::sync::Lazy;
-
+use crate::io::excel::scoring_system_reader;
 use crate::io::file_utils;
 use crate::io::html::{event, parser};
 use crate::io::html::club_points::ClubPoints;
@@ -108,6 +108,8 @@ pub enum TeamTotalsMessage {
     Find,
     FindOutputDirectoryReceived(Option<PathBuf>),
     FindOutputDirectory,
+    FindSpreadsheetDirectory,
+    FindSpreadsheetDirectoryReceived(Option<PathBuf>),
     OpenInFileViewer,
 
     AddPlacement,
@@ -614,6 +616,33 @@ impl TeamTotalsGui {
 
                 Task::none()
             }
+            TeamTotalsMessage::FindSpreadsheetDirectory => {
+                let output_directory = self.settings.output_directory.clone();
+
+                Task::perform(async move {
+                    match FileDialog::new()
+                        .set_location(output_directory.as_str())
+                        .show_open_single_file() {
+                        Ok(value) => { value }
+                        Err(_) => { None }
+                    }
+                }, TeamTotalsMessage::FindSpreadsheetDirectoryReceived)
+            }
+            TeamTotalsMessage::FindSpreadsheetDirectoryReceived(directory) => {
+                match directory {
+                    Some(directory) => {
+                        self.settings.scoring_system_file_name = Some(directory.to_str().unwrap_or("").to_string().replace("\\", "/"));
+                        scoring_system_reader::deserialize(self.settings.scoring_system_file_name.clone().unwrap());
+                        settings_changed = true;
+                    }
+                    None => {
+                        self.settings.scoring_system_file_name = None;
+                        settings_changed = true;
+                    }
+                }
+
+                Task::none()
+            }
             TeamTotalsMessage::OpenInFileViewer => {
                 file_utils::check_and_create_dir(&self.settings.output_directory);
                 println!("{}", &self.settings.output_directory);
@@ -735,6 +764,16 @@ impl TeamTotalsGui {
             xlsx_file_name_column,
             vertical_space().height(10),
         ].padding(10);
+
+        let use_scoring_system_spreadsheet: Button<TeamTotalsMessage> = Button::new(
+            Text::new(
+                if self.settings.scoring_system_file_name.is_none() {
+                    "Use Scoring System Spreadsheet..."
+                } else {
+                    "Remove Scoring System Spreadsheet"
+                })).on_press(TeamTotalsMessage::FindSpreadsheetDirectory);
+
+        column2 = column2.push(use_scoring_system_spreadsheet);
 
         column2 = column2.push(text("Points For Each Placement"));
 

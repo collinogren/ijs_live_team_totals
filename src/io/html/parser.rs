@@ -234,7 +234,7 @@ pub fn parse_ijs(ijs_events: Vec<String>, settings: Settings) -> Vec<ResultSet> 
                         .unwrap()
                         .split(", ")
                         .nth(1)
-                        .unwrap()
+                        .unwrap_or(&String::from(""))
                     )
                 );
             }
