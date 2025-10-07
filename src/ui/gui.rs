@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 use iced::{Alignment, Element, keyboard, Renderer, Subscription, Task, Theme, widget, window};
 use iced::alignment::Vertical;
 use iced::keyboard::key::Named;
-use iced::widget::{Button, Checkbox, column, Column, container, horizontal_space, keyed_column, row, Scrollable, scrollable, text, Text, text_input, vertical_rule, vertical_space};
+use iced::widget::{Button, Checkbox, column, Column, container, horizontal_space, keyed_column, radio, row, Scrollable, scrollable, text, Text, text_input, vertical_rule, vertical_space};
 use iced::widget::scrollable::RelativeOffset;
 use iced::window::icon;
 use native_dialog::FileDialog;
@@ -80,6 +80,8 @@ pub struct TeamTotalsGui {
     club_name_edits: Vec<ClubPointsField>,
     club_points_60_edits: Vec<ClubPointsField>,
     club_points_ijs_edits: Vec<ClubPointsField>,
+
+    selected_scoring_system_type: Option<ScoringSystemChoice>,
 }
 
 #[derive(Debug, Clone)]
@@ -124,8 +126,15 @@ pub enum TeamTotalsMessage {
     ClubPointsIJSEdited(usize, ClubPointsEdit),
     ClubPoints60Edited(usize, ClubPointsEdit),
     NoneInput(String),
+
+    ScoringSystemSelected(ScoringSystemChoice),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScoringSystemChoice {
+    Single,
+    Spreadsheet,
+}
 
 fn get_directory(input: String, settings: &Settings) -> Result<String, ErrorKind> {
     let result;
@@ -244,6 +253,12 @@ impl TeamTotalsGui {
             club_name_edits: vec![],
             club_points_60_edits: vec![],
             club_points_ijs_edits: vec![],
+
+            selected_scoring_system_type: Some(if settings.use_scoring_system_spreadsheet {
+                ScoringSystemChoice::Spreadsheet
+            } else {
+                ScoringSystemChoice::Single
+            }),
         };
 
         let icon_bytes = include_bytes!("icon.png");
@@ -617,22 +632,33 @@ impl TeamTotalsGui {
                 Task::none()
             }
             TeamTotalsMessage::FindSpreadsheetDirectory => {
-                let output_directory = self.settings.output_directory.clone();
+                let scoring_system_directory = self.settings.scoring_system_file_name.clone();
 
-                Task::perform(async move {
-                    match FileDialog::new()
-                        .set_location(output_directory.as_str())
-                        .show_open_single_file() {
-                        Ok(value) => { value }
-                        Err(_) => { None }
+                match scoring_system_directory {
+                    Some(_) => {
+                        Task::perform(async move {
+                            None
+                        }, TeamTotalsMessage::FindSpreadsheetDirectoryReceived)
+                    },
+                    None => {
+                        let output_directory = self.settings.output_directory.clone();
+
+                        Task::perform(async move {
+                            match FileDialog::new()
+                                .set_location(output_directory.as_str())
+                                .show_open_single_file() {
+                                Ok(value) => { value }
+                                Err(_) => { None }
+                            }
+                        }, TeamTotalsMessage::FindSpreadsheetDirectoryReceived)
                     }
-                }, TeamTotalsMessage::FindSpreadsheetDirectoryReceived)
+                }
             }
             TeamTotalsMessage::FindSpreadsheetDirectoryReceived(directory) => {
                 match directory {
                     Some(directory) => {
                         self.settings.scoring_system_file_name = Some(directory.to_str().unwrap_or("").to_string().replace("\\", "/"));
-                        scoring_system_reader::deserialize(self.settings.scoring_system_file_name.clone().unwrap());
+                        scoring_system_reader::deserialize(Some(self.settings.scoring_system_file_name.clone().unwrap()));
                         settings_changed = true;
                     }
                     None => {
@@ -686,6 +712,18 @@ impl TeamTotalsGui {
                 Task::none()
             }
             TeamTotalsMessage::NoneInput(_) => {
+                Task::none()
+            }
+            TeamTotalsMessage::ScoringSystemSelected(choice) => {
+                self.selected_scoring_system_type = Some(choice);
+
+                match choice {
+                    ScoringSystemChoice::Single => { self.settings.use_scoring_system_spreadsheet = false }
+                    ScoringSystemChoice::Spreadsheet => { self.settings.use_scoring_system_spreadsheet = true }
+                }
+
+                settings_changed = true;
+
                 Task::none()
             }
         };
@@ -765,42 +803,53 @@ impl TeamTotalsGui {
             vertical_space().height(10),
         ].padding(10);
 
-        let use_scoring_system_spreadsheet: Button<TeamTotalsMessage> = Button::new(
-            Text::new(
-                if self.settings.scoring_system_file_name.is_none() {
-                    "Use Scoring System Spreadsheet..."
-                } else {
-                    "Remove Scoring System Spreadsheet"
-                })).on_press(TeamTotalsMessage::FindSpreadsheetDirectory);
+        let scoring_system_column: widget::Column<'_, TeamTotalsMessage> = column![
+            radio("Use Single Scoring System", ScoringSystemChoice::Single, self.selected_scoring_system_type, TeamTotalsMessage::ScoringSystemSelected),
+            radio("Use Scoring System Spreadsheet", ScoringSystemChoice::Spreadsheet, self.selected_scoring_system_type, TeamTotalsMessage::ScoringSystemSelected),
+        ].into();
 
-        column2 = column2.push(use_scoring_system_spreadsheet);
+        column2 = column2.push(scoring_system_column).push(vertical_space().height(10));
 
-        column2 = column2.push(text("Points For Each Placement"));
+        if self.settings.use_scoring_system_spreadsheet {
+            let use_scoring_system_spreadsheet: Button<TeamTotalsMessage> = Button::new(
+                Text::new(
+                    if self.settings.scoring_system_file_name.is_none() {
+                        "Use Scoring System Spreadsheet..."
+                    } else {
+                        "Remove Scoring System Spreadsheet"
+                    })).on_press(TeamTotalsMessage::FindSpreadsheetDirectory);
 
-        let points_for_each_placement: Element<_> =
-            keyed_column(
-                self.points_for_each_placement
-                    .iter()
-                    .enumerate()
-                    .map(|(i, placements)| {
-                        (
-                            placements.index,
-                            placements.view(i).map(move |message| {
-                                TeamTotalsMessage::PointsForEachPlacement(i, message)
-                            }),
-                        )
-                    }),
-            )
-                .spacing(10)
-                .into();
+            column2 = column2.push(use_scoring_system_spreadsheet);
+        } else {
+            column2 = column2.push(text("Points For Each Placement"));
 
-        column2 = column2.push(points_for_each_placement).push(vertical_space().height(10));
+            let points_for_each_placement: Element<_> =
+                keyed_column(
+                    self.points_for_each_placement
+                        .iter()
+                        .enumerate()
+                        .map(|(i, placements)| {
+                            (
+                                placements.index,
+                                placements.view(i).map(move |message| {
+                                    TeamTotalsMessage::PointsForEachPlacement(i, message)
+                                }),
+                            )
+                        }),
+                )
+                    .spacing(10)
+                    .into();
 
-        let remove_placement = Button::new(Text::new("Remove").align_x(Alignment::Center)).on_press(TeamTotalsMessage::RemovePlacement).width(iced::Length::Fill);
-        let add_placement = Button::new(Text::new("Add").align_x(Alignment::Center)).on_press(TeamTotalsMessage::AddPlacement).width(iced::Length::Fill);
-        let add_remove_placement_row = row![horizontal_space().width(25), remove_placement, horizontal_space().width(25), add_placement];
+            column2 = column2.push(points_for_each_placement);
 
-        column2 = column2.push(add_remove_placement_row);
+            column2 = column2.push(vertical_space().height(10));
+
+            let remove_placement = Button::new(Text::new("Remove").align_x(Alignment::Center)).on_press(TeamTotalsMessage::RemovePlacement).width(iced::Length::Fill);
+            let add_placement = Button::new(Text::new("Add").align_x(Alignment::Center)).on_press(TeamTotalsMessage::AddPlacement).width(iced::Length::Fill);
+            let add_remove_placement_row = row![horizontal_space().width(25), remove_placement, horizontal_space().width(25), add_placement];
+
+            column2 = column2.push(add_remove_placement_row);
+        }
 
         let scroll_pane = Scrollable::new(column2).width(iced::Length::FillPortion(3)).id(SCROLLABLE_ID.clone());
 

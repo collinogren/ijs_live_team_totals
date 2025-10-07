@@ -1,3 +1,4 @@
+use crate::io::excel::scoring_system_reader::deserialize;
 use crate::io::html::result_set::ResultSet;
 use crate::io::html::scoring_system::ScoringSystem;
 use crate::settings::settings::Settings;
@@ -56,6 +57,12 @@ impl ClubPoints {
 }
 
 pub fn sum_results(results_sets: Vec<ResultSet>, settings: Settings) -> Vec<ClubPoints> {
+    let spreadsheet_scoring_system = if settings.use_scoring_system_spreadsheet {
+        Some(deserialize(settings.scoring_system_file_name))
+    } else {
+        None
+    };
+
     let mut club_points_vec: Vec<ClubPoints> = vec![];
 
     for results_set in &results_sets {
@@ -77,10 +84,20 @@ pub fn sum_results(results_sets: Vec<ResultSet>, settings: Settings) -> Vec<Club
         for club in &mut club_points_vec {
             if results_set.club.clone().unwrap().eq(&club.club) {
                 if results_set.rank.clone().unwrap() <= settings.default_points_system.len() as u64 {
-                    match results_set.scoring_system {
-                        ScoringSystem::IJS => { club.points_ijs.replace(club.points_ijs.unwrap_or(0.0) + settings.default_points_system[(results_set.rank.clone().unwrap() - 1) as usize]); }
-                        ScoringSystem::SixO => { club.points_60.replace(club.points_60().unwrap_or(0.0) + settings.default_points_system[(results_set.rank.clone().unwrap() - 1) as usize]); }
-                    };
+                    match &spreadsheet_scoring_system {
+                        Some(scoring_system) => {
+                            match results_set.scoring_system {
+                                ScoringSystem::IJS => { club.points_ijs.replace(club.points_ijs.unwrap_or(0.0) + scoring_system.get(&results_set.participants.unwrap()).unwrap().get((results_set.rank.clone().unwrap() - 1) as usize).unwrap()); }
+                                ScoringSystem::SixO => { club.points_60.replace(club.points_60().unwrap_or(0.0) + scoring_system.get(&results_set.participants.unwrap()).unwrap().get((results_set.rank.clone().unwrap() - 1) as usize).unwrap()); }
+                            };
+                        },
+                        None => {
+                            match results_set.scoring_system {
+                                ScoringSystem::IJS => { club.points_ijs.replace(club.points_ijs.unwrap_or(0.0) + settings.default_points_system[(results_set.rank.clone().unwrap() - 1) as usize]); }
+                                ScoringSystem::SixO => { club.points_60.replace(club.points_60().unwrap_or(0.0) + settings.default_points_system[(results_set.rank.clone().unwrap() - 1) as usize]); }
+                            };
+                        }
+                    }
                 }
 
                 continue;

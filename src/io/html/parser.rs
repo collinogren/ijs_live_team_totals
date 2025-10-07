@@ -200,9 +200,11 @@ pub fn parse_ijs(ijs_events: Vec<String>, settings: Settings) -> Vec<ResultSet> 
 
         let document_select = document.select(&selector);
         let document_select_collection = document_select.collect::<Vec<ElementRef>>();
+
+        let mut results_for_event = vec![];
         for element in document_select_collection.clone().into_iter().enumerate() {
             let mut has_rank = false;
-            let mut result_set = ResultSet::new(IJS, PointsSystem::default(&settings));
+            let mut result_set = ResultSet::new(IJS);
             if element.1.has_class(&CssLocalName::from("rank"), CaseSensitivity::CaseSensitive) {
                 result_set.rank = Some(match
                 String::from(element.1.html()
@@ -239,8 +241,15 @@ pub fn parse_ijs(ijs_events: Vec<String>, settings: Settings) -> Vec<ResultSet> 
                 );
             }
 
-            results.push(result_set);
+            results_for_event.push(result_set);
         }
+
+        let participants = results_for_event.len() as u64;
+        for mut result in results_for_event.iter_mut() {
+            result.participants = Some(participants);
+        }
+
+        results.append(&mut results_for_event);
     }
 
     results
@@ -255,9 +264,11 @@ pub fn parse_60(files_60: Vec<String>, settings: Settings) -> Vec<ResultSet> {
 
         let document_select = document.select(&selector);
         let document_select_collection = document_select.collect::<Vec<ElementRef>>();
+
+        let mut results_for_event = vec![];
         for element in document_select_collection.clone().into_iter().enumerate() {
             let mut has_name = false;
-            let mut result_set = ResultSet::new(SixO, PointsSystem::default(&settings));
+            let mut result_set = ResultSet::new(SixO);
 
             if element.1.html().contains("<td rowspan=\"1\" colspan=\"1\">") { // Name first this time because the name has more distinctive markings for it in the HTML.
                 let temp_club = String::from(element.1.html()
@@ -322,8 +333,15 @@ pub fn parse_60(files_60: Vec<String>, settings: Settings) -> Vec<ResultSet> {
                 Err(err) => panic!("{}", err),
             });
 
-            results.push(result_set);
+            results_for_event.push(result_set);
         }
+
+        let participants = results_for_event.len() as u64;
+        for mut result in results_for_event.iter_mut() {
+            result.participants = Some(participants);
+        }
+
+        results.append(&mut results_for_event);
     }
 
     results

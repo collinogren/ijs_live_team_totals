@@ -19,18 +19,18 @@ pub fn clean_club_names(result_sets: &mut Vec<ResultSet>) {
 
 pub struct ResultSet {
     pub(crate) rank: Option<u64>,
+    pub(crate) participants: Option<u64>,
     pub(crate) club: Option<String>,
     pub(crate) scoring_system: ScoringSystem,
-    pub(crate) points_system: PointsSystem,
 }
 
 impl ResultSet {
-    pub(crate) fn new(scoring_system: ScoringSystem, points_system: PointsSystem) -> Self {
+    pub(crate) fn new(scoring_system: ScoringSystem) -> Self {
         Self {
             rank: None,
+            participants: None,
             club: None,
             scoring_system,
-            points_system,
         }
     }
 }

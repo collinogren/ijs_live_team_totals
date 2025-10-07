@@ -1,46 +1,49 @@
-use calamine::{deserialize_as_f64_or_none, Data, DeError, RangeDeserializer};
+use calamine::{deserialize_as_f64_or_none, Data, DeError, RangeDeserializer, open_workbook_auto, Range, DataType};
 use calamine::deserialize_as_i64_or_none;
 use std::collections::HashMap;
 use calamine::{open_workbook, RangeDeserializerBuilder, Reader, Xlsx};
 use serde_derive::Deserialize;
 
-#[derive(Deserialize)]
-struct Record {
-    #[serde(deserialize_with = "deserialize_as_i64_or_none")]
-    number_of_placements: Option<i64>,
-    #[serde(deserialize_with = "deserialize_as_f64_or_none")]
-    points: Option<f64>,
-}
+pub fn deserialize(path: Option<String>) -> HashMap<u64, Vec<f64>> {
+    if path.is_none() {
+        return HashMap::new();
+    }
 
-pub fn deserialize(path: String) -> HashMap<i64, Vec<f64>> {
+    let path = path.unwrap();
+
     let mut workbook: Xlsx<_> = open_workbook(path).unwrap();
-    let range = workbook.worksheet_range(workbook.sheet_names().get(0).unwrap()).unwrap();
 
-    let iter: RangeDeserializer<'_, Data, Record> = RangeDeserializerBuilder::new().from_range(&range).unwrap();
+    let range: Range<Data> = match workbook.worksheet_range("Points Chart") {
+        Ok(range) => range,
+        Err(_) => panic!("Failed to read \"Points Chart\""),
+    };
 
-    let mut scoring_system_map: HashMap<i64, Vec<f64>> = HashMap::new();
+    let mut columns: HashMap<u64, Vec<f64>> = HashMap::new();
 
-    iter.for_each(|result| {
-        match result {
-            Ok(record) => {
-                match record.number_of_placements {
-                    Some(number_of_placements) => {
-                        if scoring_system_map.contains_key(&number_of_placements) {
-                            scoring_system_map.get_mut(&number_of_placements).unwrap().push(record.points.unwrap());
-                        } else {
-                            scoring_system_map.insert(number_of_placements.clone(), vec![record.points.unwrap()]);
-                        }
+    let mut header_row = true;
+    let mut headers: Vec<u64> = Vec::new();
+
+    for row in range.rows() {
+        if header_row {
+            for cell in row {
+                headers.push(cell.as_i64().unwrap() as u64);
+                columns.insert(cell.as_i64().unwrap() as u64, Vec::new());
+            }
+
+            header_row = false;
+        } else {
+            for (i, cell) in row.iter().enumerate() {
+                if let Some(header) = headers.get(i) {
+                    if let Some(column_vec) = columns.get_mut(header) {
+                        column_vec.push(match cell.as_f64() {
+                            Some(cell_value) => cell_value,
+                            None => continue,
+                        });
                     }
-                    None => {}
                 }
             }
-            Err(err) => {
-                eprintln!("{:?}", err);
-            }
         }
-    });
+    }
 
-    println!("{:?}", scoring_system_map);
-
-    scoring_system_map
+    columns
 }
