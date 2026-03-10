@@ -26,7 +26,6 @@ use scraper::{CaseSensitivity, Element, ElementRef, Html, Selector};
 use scraper::selector::CssLocalName;
 use crate::io::html::club_points::{auto_club_combiner, ClubPoints, sum_results};
 use crate::io::html::event::Event;
-use crate::io::html::points_system::PointsSystem;
 use crate::io::html::result_set::{clean_club_names, ResultSet};
 use crate::io::html::results_sorter;
 use crate::io::html::scoring_system::ScoringSystem::{IJS, SixO};
@@ -69,8 +68,6 @@ pub fn parse_results(events: Vec<Event>, settings: &Settings, competition_name: 
     thread::spawn(move || {
         results_60_sender.send(parse_60(files_60_clone.to_vec(), settings_copy)).unwrap();
     });
-
-    //while !results_ijs_thread.is_finished() || !results_60_thread.is_finished() {}
 
     let results_ijs = results_ijs_receiver.recv().unwrap();
     let results_60 = results_60_receiver.recv().unwrap();

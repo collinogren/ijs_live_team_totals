@@ -20,7 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-use std::{fs, thread, vec};
+use std::{thread, vec};
 use std::ffi::OsStr;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -30,8 +30,7 @@ use iced::alignment::Vertical;
 use iced::keyboard::key::Named;
 use iced::widget::{Button, Checkbox, column, Column, container, horizontal_space, keyed_column, radio, row, Scrollable, scrollable, text, Text, text_input, vertical_rule, vertical_space};
 use iced::widget::scrollable::RelativeOffset;
-use iced::window::icon;
-use native_dialog::FileDialog;
+use native_dialog::FileDialogBuilder;
 use once_cell::sync::Lazy;
 use crate::io::excel::scoring_system_reader;
 use crate::io::file_utils;
@@ -40,10 +39,9 @@ use crate::io::html::club_points::ClubPoints;
 use crate::io::html::event::Event;
 use crate::io::html::parser::State;
 use crate::io::html::results_sorter::sort_results;
-use crate::settings::settings::{appdata, Settings};
+use crate::settings::settings::{Settings};
 use crate::ui::event_checkbox::{EventCheckbox, EventToInclude};
 use crate::ui::gui::TeamTotalsMessage::NoneInput;
-use crate::ui::image_loader::png_to_rgba;
 use crate::ui::text_field::{ClubPointsEdit, ClubPointsField, PointsField, PointsForEachPlacement, TextField};
 
 static COMPETITION_INPUT_ID: Lazy<text_input::Id> = Lazy::new(competition_input_id);
@@ -231,8 +229,6 @@ impl TeamTotalsGui {
 
 impl TeamTotalsGui {
     pub fn new() -> (Self, Task<TeamTotalsMessage>) {
-        let (id, _open) = window::open(window::Settings::default());
-
         let settings = Settings::read();
 
         let mut gui = TeamTotalsGui {
@@ -261,27 +257,7 @@ impl TeamTotalsGui {
             }),
         };
 
-        let icon_bytes = include_bytes!("icon.png");
-        let binding = appdata("/assets");
-        let binding = binding.0.as_str();
-        let icon_path = Path::new(binding);
-        if !icon_path.exists() {
-            fs::create_dir_all(icon_path).unwrap();
-        }
-
-        let binding = appdata("/assets/icon.png");
-        let binding = binding.0.as_str();
-        let icon_path = Path::new(binding);
-
-        if !icon_path.exists() {
-            fs::write(icon_path, icon_bytes).unwrap();
-        }
-
-        let (raw_icon, width, height) = png_to_rgba(icon_path.to_str().unwrap());
-        let icon = window::change_icon(id, icon::from_rgba(raw_icon, width, height).unwrap());
-
         let mut tasks = vec![];
-        tasks.push(icon);
 
         tasks.push(text_input::focus(COMPETITION_INPUT_ID.clone()));
 
@@ -529,9 +505,10 @@ impl TeamTotalsGui {
                 let base_directory = self.settings.isu_calc_base_directory.clone();
 
                 Task::perform(async move {
-                    let directory = match FileDialog::new()
+                    let directory = match FileDialogBuilder::default()
                         .set_location(base_directory.as_str())
-                        .show_open_single_dir() {
+                        .open_single_dir()
+                        .show() {
                         Ok(value) => { value }
                         Err(_) => { None }
                     };
@@ -612,9 +589,10 @@ impl TeamTotalsGui {
                 let output_directory = self.settings.output_directory.clone();
 
                 Task::perform(async move {
-                    match FileDialog::new()
+                    match FileDialogBuilder::default()
                         .set_location(output_directory.as_str())
-                        .show_open_single_dir() {
+                        .open_single_dir()
+                        .show() {
                         Ok(value) => { value }
                         Err(_) => { None }
                     }
@@ -632,6 +610,7 @@ impl TeamTotalsGui {
                 Task::none()
             }
             TeamTotalsMessage::FindSpreadsheetDirectory => {
+                file_utils::check_and_create_dir(&self.settings.output_directory);
                 let scoring_system_directory = self.settings.scoring_system_file_name.clone();
 
                 match scoring_system_directory {
@@ -644,11 +623,14 @@ impl TeamTotalsGui {
                         let output_directory = self.settings.output_directory.clone();
 
                         Task::perform(async move {
-                            match FileDialog::new()
+                            match FileDialogBuilder::default()
                                 .set_location(output_directory.as_str())
-                                .show_open_single_file() {
+                                .open_single_file()
+                                .show() {
                                 Ok(value) => { value }
-                                Err(_) => { None }
+                                Err(_) => {
+                                    None
+                                }
                             }
                         }, TeamTotalsMessage::FindSpreadsheetDirectoryReceived)
                     }
@@ -657,11 +639,21 @@ impl TeamTotalsGui {
             TeamTotalsMessage::FindSpreadsheetDirectoryReceived(directory) => {
                 match directory {
                     Some(directory) => {
-                        self.settings.scoring_system_file_name = Some(directory.to_str().unwrap_or("").to_string().replace("\\", "/"));
-                        scoring_system_reader::deserialize(Some(self.settings.scoring_system_file_name.clone().unwrap()));
+                        let scoring_system_file_name = Some(directory.to_str().unwrap_or("").to_string().replace("\\", "/"));
+                        match scoring_system_reader::read_scoring_system_spreadsheet(scoring_system_file_name.clone()) {
+                            Ok(_) => {
+                                self.settings.scoring_system_file_name = scoring_system_file_name;
+                                self.status = "Successfully read selected scoring system spreadsheet".to_string();
+                            },
+                            Err(err) => {
+                                self.status = err;
+                                self.settings.scoring_system_file_name = None;
+                            },
+                        }
                         settings_changed = true;
                     }
                     None => {
+                        self.status = "No scoring system spreadsheet selected".to_string();
                         self.settings.scoring_system_file_name = None;
                         settings_changed = true;
                     }
@@ -779,10 +771,10 @@ impl TeamTotalsGui {
 
         let include_60_checkbox = Checkbox::new("Include 6.0", self.settings.include_60).on_toggle(TeamTotalsMessage::Include60);
         let include_ijs_checkbox = Checkbox::new("Include IJS", self.settings.include_ijs).on_toggle(TeamTotalsMessage::IncludeIJS);
-        let generate_xslx_checkbox = Checkbox::new("Generate .xlsx file", self.settings.generate_xlsx).on_toggle(TeamTotalsMessage::GenerateXLSX);
-        let generate_html_checkbox = Checkbox::new("Generate .html file", self.settings.generate_html).on_toggle(TeamTotalsMessage::GenerateHTML);
+        let generate_xslx_checkbox = Checkbox::new("Generate .xlsx File", self.settings.generate_xlsx).on_toggle(TeamTotalsMessage::GenerateXLSX);
+        let generate_html_checkbox = Checkbox::new("Generate .html File", self.settings.generate_html).on_toggle(TeamTotalsMessage::GenerateHTML);
         let attempt_60_club_correction_checkbox = Checkbox::new("Attempt 6.0 Club Correction", self.settings.attempt_automatic_60_club_name_recombination).on_toggle(TeamTotalsMessage::Attempt60ClubCorrection);
-        let use_event_name_checkbox = Checkbox::new("Use Event Name For Results Path", self.settings.use_event_name_for_results_path).on_toggle(TeamTotalsMessage::UseEventNameForResultsPath);
+        let use_event_name_checkbox = Checkbox::new("Use Event Name for Results Path", self.settings.use_event_name_for_results_path).on_toggle(TeamTotalsMessage::UseEventNameForResultsPath);
 
         let font_size = text_input("", &self.font_size).on_input(TeamTotalsMessage::XLSXFontSize);
         let font_size_column = column![text("Font Size"), font_size];
@@ -986,5 +978,3 @@ impl TeamTotalsGui {
         Subscription::batch(subscriptions)
     }
 }
-
-

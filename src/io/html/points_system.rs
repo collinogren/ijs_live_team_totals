@@ -11,7 +11,7 @@ impl PointsSystem {
     pub fn default(settings: &Settings) -> Self {
         Self {
             single_points_system: settings.default_points_system.clone(),
-            spreadsheet_points_system: scoring_system_reader::deserialize(settings.scoring_system_file_name.clone()),
+            spreadsheet_points_system: scoring_system_reader::read_scoring_system_spreadsheet(settings.scoring_system_file_name.clone()).unwrap(),
         }
     }
 }

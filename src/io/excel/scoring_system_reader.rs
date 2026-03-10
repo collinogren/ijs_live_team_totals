@@ -1,21 +1,23 @@
-use calamine::{deserialize_as_f64_or_none, Data, DeError, RangeDeserializer, open_workbook_auto, Range, DataType};
-use calamine::deserialize_as_i64_or_none;
+use calamine::{Data, Range, DataType};
 use std::collections::HashMap;
-use calamine::{open_workbook, RangeDeserializerBuilder, Reader, Xlsx};
-use serde_derive::Deserialize;
+use calamine::{open_workbook, Reader, Xlsx};
 
-pub fn deserialize(path: Option<String>) -> HashMap<u64, Vec<f64>> {
-    if path.is_none() {
-        return HashMap::new();
-    }
+pub struct ScoringSystemReadError;
 
-    let path = path.unwrap();
+pub fn read_scoring_system_spreadsheet(path: Option<String>) -> Result<HashMap<u64, Vec<f64>>, String> {
+    let path = match path {
+        Some(path) => path,
+        None => return Err("No scoring system spreadsheet path given".to_string()),
+    };
 
-    let mut workbook: Xlsx<_> = open_workbook(path).unwrap();
+    let mut workbook: Xlsx<_> = match open_workbook(path) {
+        Ok(value) => value,
+        Err(_) => return Err("Failed to read scoring system spreadsheet. Is it in the right format?".to_string()),
+    };
 
     let range: Range<Data> = match workbook.worksheet_range("Points Chart") {
         Ok(range) => range,
-        Err(_) => panic!("Failed to read \"Points Chart\""),
+        Err(_) => return Err("Failed to read page \"Points Chart.\" Does it exist?".to_string()),
     };
 
     let mut columns: HashMap<u64, Vec<f64>> = HashMap::new();
@@ -26,8 +28,12 @@ pub fn deserialize(path: Option<String>) -> HashMap<u64, Vec<f64>> {
     for row in range.rows() {
         if header_row {
             for cell in row {
-                headers.push(cell.as_i64().unwrap() as u64);
-                columns.insert(cell.as_i64().unwrap() as u64, Vec::new());
+                let cell: i64 = match cell.as_i64() {
+                    Some(value) => value,
+                    None => return Err("One or more column headers are not integers.".to_string()),
+                };
+                headers.push(cell as u64);
+                columns.insert(cell as u64, Vec::new());
             }
 
             header_row = false;
@@ -37,7 +43,11 @@ pub fn deserialize(path: Option<String>) -> HashMap<u64, Vec<f64>> {
                     if let Some(column_vec) = columns.get_mut(header) {
                         column_vec.push(match cell.as_f64() {
                             Some(cell_value) => cell_value,
-                            None => continue,
+                            None => if cell.is_empty() {
+                                continue
+                            } else {
+                                return Err(format!("Cell in column {} with value {} is not a number", header, cell.to_string()));
+                            },
                         });
                     }
                 }
@@ -45,5 +55,5 @@ pub fn deserialize(path: Option<String>) -> HashMap<u64, Vec<f64>> {
         }
     }
 
-    columns
+    Ok(columns)
 }

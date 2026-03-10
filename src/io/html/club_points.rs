@@ -1,4 +1,4 @@
-use crate::io::excel::scoring_system_reader::deserialize;
+use crate::io::excel::scoring_system_reader::read_scoring_system_spreadsheet;
 use crate::io::html::result_set::ResultSet;
 use crate::io::html::scoring_system::ScoringSystem;
 use crate::settings::settings::Settings;
@@ -58,7 +58,7 @@ impl ClubPoints {
 
 pub fn sum_results(results_sets: Vec<ResultSet>, settings: Settings) -> Vec<ClubPoints> {
     let spreadsheet_scoring_system = if settings.use_scoring_system_spreadsheet {
-        Some(deserialize(settings.scoring_system_file_name))
+        Some(read_scoring_system_spreadsheet(settings.scoring_system_file_name).unwrap())
     } else {
         None
     };

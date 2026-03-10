@@ -20,8 +20,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-//#![windows_subsystem = "windows"]
+#![windows_subsystem = "windows"]
 
+use iced::{window};
+use iced::window::icon;
 use crate::ui::gui::TeamTotalsGui;
 
 mod io;
@@ -33,5 +35,15 @@ fn main() -> Result<(), iced::Error> {
     iced::application(TeamTotalsGui::title, TeamTotalsGui::update, TeamTotalsGui::view)
         .subscription(TeamTotalsGui::subscription)
         .theme(TeamTotalsGui::theme)
+        .window(window::Settings {
+            icon: Some(
+                icon::from_file_data(
+                    include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icon.ico")),
+                    None,
+                ).expect("Failed to parse icon data"),
+            ),
+            ..Default::default()
+        }
+        )
         .run_with(TeamTotalsGui::new)
 }
