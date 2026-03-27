@@ -32,31 +32,31 @@ pub fn retrieve_events(path: String) -> (Vec<Event>, String, State) {
         String::from(f.unwrap().file_name().to_str().unwrap())
     }).collect::<Vec<String>>();
 
-    let files_60 = Arc::new(RwLock::new(vec![]));
-    let files_ijs = Arc::new(RwLock::new(vec![]));
+    let events_ijs = Arc::new(RwLock::new(vec![]));
+    let events_60 = Arc::new(RwLock::new(vec![]));
 
     //Get all files for 6.0 and IJS separately.
     for file in files {
         //Get all 6.0 results files. These files seem to have names ending in c1.htm.
         if file.ends_with("c1.htm") {
-            files_60.write().unwrap().push(String::from(path.clone() + "/" + file.as_str()));
+            events_60.write().unwrap().push(String::from(path.clone() + "/" + file.as_str()));
             continue;
         }
 
         //Reading from the protocol sheets seems to be the easiest way to do this locally.
         //The protocol sheets seem to be contained in files that start with SEGM
         if file.starts_with("SEGM") {
-            files_ijs.write().unwrap().push(String::from(path.clone() + "/" + file.as_str()));
+            events_ijs.write().unwrap().push(String::from(path.clone() + "/" + file.as_str()));
             continue;
         }
     }
 
-    let files_ijs_clones = files_ijs.clone();
+    let files_ijs_clones = events_ijs.clone();
     let files_ijs_thread = thread::spawn(move || {
         files_ijs_clones.write().unwrap().sort();
     });
 
-    let files_60_clone = files_60.clone();
+    let files_60_clone = events_60.clone();
     let files_60_thread = thread::spawn(move || {
         files_60_clone.write().unwrap().sort();
     });
@@ -64,14 +64,14 @@ pub fn retrieve_events(path: String) -> (Vec<Event>, String, State) {
     files_ijs_thread.join().unwrap();
     files_60_thread.join().unwrap();
 
-    let files_ijs_clones = files_ijs.clone();
+    let files_ijs_clones = events_ijs.clone();
     let (events_ijs_sender, events_ijs_receiver) = mpsc::channel::<Vec<Event>>();
     thread::spawn(move || {
         let event_names_ijs = crate::io::html::parser::parse_ijs_event_names(&files_ijs_clones.read().unwrap());
         events_ijs_sender.send(event_names_ijs).unwrap();
     });
 
-    let files_60_clones = files_60.clone();
+    let files_60_clones = events_60.clone();
     let (events_60_sender, events_60_receiver) = mpsc::channel::<Vec<Event>>();
     thread::spawn(move || {
         let event_names_60 = crate::io::html::parser::parse_60_event_names(&files_60_clones.read().unwrap());
@@ -98,5 +98,5 @@ pub fn retrieve_events(path: String) -> (Vec<Event>, String, State) {
         return (event_names, "The specified competition exists, but there are no results at this time.".to_string(), State::Error);
     }
 
-    (event_names, format!("Found {} IJS events and {} 6.0 events.", files_ijs.read().unwrap().len(), files_60.read().unwrap().len()), State::Ok)
+    (event_names, format!("Found {} IJS events and {} 6.0 events.", events_ijs.read().unwrap().len(), events_60.read().unwrap().len()), State::Ok)
 }

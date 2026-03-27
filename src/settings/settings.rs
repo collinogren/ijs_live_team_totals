@@ -56,6 +56,7 @@ pub struct Settings {
     pub(crate) include_60: bool,
     pub(crate) include_ijs: bool,
     pub(crate) generate_xlsx: bool,
+    pub(crate) generate_xlsx_info_dump: bool,
     pub(crate) generate_html: bool,
     pub(crate) use_scoring_system_spreadsheet: bool,
     pub(crate) attempt_automatic_60_club_name_recombination: bool,
@@ -64,9 +65,11 @@ pub struct Settings {
     pub(crate) html_relative_directory: String,
     pub(crate) output_directory: String,
     pub(crate) xlsx_file_name: String,
+    pub(crate) xlsx_info_dump_file_name: String,
     pub(crate) html_file_name: String,
     pub(crate) scoring_system_file_name: Option<String>,
     pub(crate) xlsx_header_cell_values: Vec<String>,
+    pub(crate) xlsx_info_dump_header_cell_values: Vec<String>,
     pub(crate) xlsx_column_widths: Vec<i32>,
     pub(crate) xlsx_font_size: u32,
 }
@@ -80,6 +83,7 @@ impl Default for Settings {
             include_ijs: true,
             generate_xlsx: true,
             generate_html: true,
+            generate_xlsx_info_dump: false,
             use_scoring_system_spreadsheet: false,
             attempt_automatic_60_club_name_recombination: true,
             use_event_name_for_results_path: true,
@@ -87,9 +91,11 @@ impl Default for Settings {
             html_relative_directory: String::from("/IJScompanion_html_winnercomm"),
             output_directory: documents(),
             xlsx_file_name: String::from("team_totals.xlsx"),
+            xlsx_info_dump_file_name: String::from("team_totals_info_dump.xlsx"),
             html_file_name: String::from("team_totals.html"),
             scoring_system_file_name: None,
             xlsx_header_cell_values: vec![String::from("Rank"), String::from("Club"), String::from("IJS"), String::from("6.0"), String::from("Total")],
+            xlsx_info_dump_header_cell_values: vec![String::from("Event"), String::from("Skater"), String::from("Club"), String::from("Rank"), String::from("Total Participants"), String::from("Points"), String::from("Scoring System")],
             xlsx_column_widths: vec![15, 100, 11, 11, 15],
             xlsx_font_size: 32,
         }
@@ -102,6 +108,7 @@ impl Default for Settings {
         include_60: bool,
         include_ijs: bool,
         generate_xlsx: bool,
+        generate_xlsx_info_dump: bool,
         generate_html: bool,
         use_scoring_system_spreadsheet: bool,
         participant_quantity_exclusion_point: u64,
@@ -111,9 +118,11 @@ impl Default for Settings {
         html_relative_directory: String,
         output_directory: String,
         xlsx_file_name: String,
+        xlsx_info_dump_file_name: String,
         html_file_name: String,
         scoring_system_file_name: Option<String>,
         xlsx_header_cell_values: Vec<String>,
+        xlsx_info_dump_header_cell_values: Vec<String>,
         xlsx_column_widths: Vec<i32>,
         xlsx_font_size: u32,
     ) -> Self {
@@ -122,6 +131,7 @@ impl Default for Settings {
             include_60,
             include_ijs,
             generate_xlsx,
+            generate_xlsx_info_dump,
             generate_html,
             use_scoring_system_spreadsheet,
             attempt_automatic_60_club_name_recombination,
@@ -130,9 +140,11 @@ impl Default for Settings {
             html_relative_directory,
             output_directory,
             xlsx_file_name,
+            xlsx_info_dump_file_name,
             html_file_name,
             scoring_system_file_name,
             xlsx_header_cell_values,
+            xlsx_info_dump_header_cell_values,
             xlsx_column_widths,
             xlsx_font_size,
         }
@@ -195,5 +207,9 @@ impl Default for Settings {
 
     pub fn xlsx_path(&self) -> String {
         self.output_directory.clone() + "/" + self.xlsx_file_name.as_str()
+    }
+
+    pub fn xlsx_info_dump_path(&self) -> String {
+        self.output_directory.clone() + "/" + self.xlsx_info_dump_file_name.as_str()
     }
 }

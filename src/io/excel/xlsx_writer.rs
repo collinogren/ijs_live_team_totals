@@ -19,12 +19,13 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
-
 use std::path::Path;
 use rust_xlsxwriter;
 use rust_xlsxwriter::{ColNum, Format, FormatAlign, Formula, Workbook};
+use crate::io::excel::scoring_system_reader::read_scoring_system_spreadsheet;
 use crate::io::file_utils;
 use crate::io::html::club_points::ClubPoints;
+use crate::io::html::result_set::ResultSet;
 use crate::settings::settings::Settings;
 
 pub fn create_xlsx(club_points: &Vec<ClubPoints>, settings: Settings) {
@@ -64,6 +65,71 @@ pub fn create_xlsx(club_points: &Vec<ClubPoints>, settings: Settings) {
     file_utils::check_and_create_dir(&settings.output_directory);
 
     let path = settings.xlsx_path();
+
+    for i in 0..i32::MAX {
+        let modified_path = if i != 0 {
+            path.clone().replace(".xlsx", format!("({}).xlsx", i).as_str())
+        } else {
+            path.clone()
+        };
+
+        if Path::new(modified_path.as_str()).exists() {
+            continue;
+        }
+
+        match workbook.save(&modified_path) {
+            Ok(_) => {
+                break;
+            }
+            Err(_) => {
+                continue;
+            }
+        }
+    }
+}
+
+pub fn create_xlsx_info_dump(raw_results: &Vec<ResultSet>, settings: Settings) {
+    let spreadsheet_scoring_system = if settings.use_scoring_system_spreadsheet {
+        Some(read_scoring_system_spreadsheet(settings.scoring_system_file_name.clone()).unwrap())
+    } else {
+        None
+    };
+
+    let mut workbook = Workbook::new();
+
+    let worksheet = workbook.add_worksheet();
+
+    worksheet.set_print_gridlines(true);
+    let text_format = Format::new();
+
+    for (column, value) in settings.xlsx_info_dump_header_cell_values.iter().enumerate() {
+        worksheet
+            .write_with_format(0, column as ColNum, value.as_str(), &text_format)
+            .expect(format!("Failed to write \"{}\" to worksheet at (0, {})", value, column)
+                .as_str());
+    }
+
+    for (i, result) in raw_results.iter().enumerate() {
+        let points = match &spreadsheet_scoring_system {
+            Some(scoring_system) => {
+                scoring_system.get(&result.participants.unwrap()).unwrap().get((result.rank.clone().unwrap() - 1) as usize).unwrap()
+            }
+            None => {
+                settings.default_points_system.get((result.rank.clone().unwrap() - 1) as usize).unwrap()
+            }
+        };
+        worksheet.write_with_format(i as u32 + 1, 0, result.event(), &text_format).expect(format!("Failed to write event name for {}", result.name()).as_str());
+        worksheet.write_with_format(i as u32 + 1, 1, result.name(), &text_format).expect(format!("Failed to write skater name for {}", result.name()).as_str());
+        worksheet.write_with_format(i as u32 + 1, 2, result.club(), &text_format).expect(format!("Failed to write club name for {}", result.club()).as_str());
+        worksheet.write_with_format(i as u32 + 1, 3, result.rank(), &text_format).expect(format!("Failed to write rank for {}", result.name()).as_str());
+        worksheet.write_with_format(i as u32 + 1, 4, result.participants(), &text_format).expect(format!("Failed to write number of participants for {}", result.name()).as_str());
+        worksheet.write_with_format(i as u32 + 1, 5, *points, &text_format).expect(format!("Failed to write score for {}", result.name()).as_str());
+        worksheet.write_with_format(i as u32 + 1, 6, result.scoring_system.get_name(), &text_format).expect(format!("Failed to write scoring system type for {}", result.name()).as_str());
+    }
+
+    file_utils::check_and_create_dir(&settings.output_directory);
+
+    let path = settings.xlsx_info_dump_path();
 
     for i in 0..i32::MAX {
         let modified_path = if i != 0 {

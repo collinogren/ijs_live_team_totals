@@ -3,6 +3,7 @@ use std::path::{Path};
 use crate::io::excel::xlsx_writer;
 use crate::io::html::club_points::ClubPoints;
 use crate::io::html::html_writer;
+use crate::io::html::result_set::ResultSet;
 use crate::settings::settings::Settings;
 
 pub fn check_and_create_dir(path: &String) -> bool {
@@ -26,9 +27,13 @@ pub fn check_and_create_dir(path: &String) -> bool {
     }
 }
 
-pub fn output_files(club_points: &Vec<ClubPoints>, settings: &Settings, competition_name: &String) {
+pub fn output_files(club_points: &Vec<ClubPoints>, raw_results: &Vec<ResultSet>, settings: &Settings, competition_name: &String) {
     if settings.generate_xlsx {
         write_xlsx(club_points, settings);
+    }
+
+    if settings.generate_xlsx_info_dump {
+        write_xlsx_info_dump(raw_results, settings);
     }
 
     if settings.generate_html {
@@ -38,6 +43,10 @@ pub fn output_files(club_points: &Vec<ClubPoints>, settings: &Settings, competit
 
 fn write_xlsx(results: &Vec<ClubPoints>, settings: &Settings) {
     xlsx_writer::create_xlsx(&results, settings.clone());
+}
+
+fn write_xlsx_info_dump(raw_results: &Vec<ResultSet>, settings: &Settings) {
+    xlsx_writer::create_xlsx_info_dump(&raw_results, settings.clone());
 }
 
 fn write_html(results: &Vec<ClubPoints>, settings: &Settings, competition_name: &String) {
