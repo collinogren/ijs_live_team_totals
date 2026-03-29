@@ -36,37 +36,35 @@ pub enum State {
     Error,
 }
 
-pub fn parse_results(events: Vec<Event>, settings: &Settings, competition_name: &String) -> (Vec<ClubPoints>, String, State) {
-    let mut files_ijs = vec![];
-    let mut files_60 = vec![];
+pub fn parse_results(events: Vec<Event>, settings: &Settings) -> (Vec<ClubPoints>, Vec<ResultSet>, String, State) {
+    let mut events_ijs = vec![];
+    let mut events_60 = vec![];
 
     for event in &events {
         if event.active {
             if event.scoring_system == IJS {
-                files_ijs.push(event.file_path.clone());
+                events_ijs.push(event.clone());
             } else if event.scoring_system == SixO {
-                files_60.push(event.file_path.clone());
+                events_60.push(event.clone());
             }
         }
     }
 
-    let files_ijs = Arc::new(files_ijs);
-    let files_60 = Arc::new(files_60);
+    let events_ijs = Arc::new(events_ijs);
+    let events_60 = Arc::new(events_60);
 
     let (results_ijs_sender, results_ijs_receiver) = mpsc::channel::<Vec<ResultSet>>();
 
-    let files_ijs_clone = files_ijs.clone();
-    let settings_clone = settings.clone();
+    let events_ijs_clone = events_ijs.clone();
     thread::spawn(move || {
-        results_ijs_sender.send(parse_ijs(files_ijs_clone.to_vec(), settings_clone)).unwrap();
+        results_ijs_sender.send(parse_ijs(events_ijs_clone.to_vec())).unwrap();
     });
 
     let (results_60_sender, results_60_receiver) = mpsc::channel::<Vec<ResultSet>>();
 
-    let settings_copy = settings.clone();
-    let files_60_clone = files_60.clone();
+    let events_60_clone = events_60.clone();
     thread::spawn(move || {
-        results_60_sender.send(parse_60(files_60_clone.to_vec(), settings_copy)).unwrap();
+        results_60_sender.send(parse_60(events_60_clone.to_vec())).unwrap();
     });
 
     let results_ijs = results_ijs_receiver.recv().unwrap();
@@ -80,7 +78,7 @@ pub fn parse_results(events: Vec<Event>, settings: &Settings, competition_name: 
 
     clean_club_names(&mut combined_raw_results);
 
-    let mut results = sum_results(combined_raw_results, settings.clone());
+    let mut results = sum_results(&combined_raw_results, settings.clone());
 
     if settings.attempt_automatic_60_club_name_recombination {
         results = auto_club_combiner(results);
@@ -88,7 +86,7 @@ pub fn parse_results(events: Vec<Event>, settings: &Settings, competition_name: 
 
     results_sorter::sort_results(&mut results);
 
-    (results, String::from("Results Successfully Calculated"), State::Ok)
+    (results, combined_raw_results, String::from("Results Successfully Calculated"), State::Ok)
 }
 
 pub(crate) const HTML_CHARACTER_ENTITIES: [(&'static str, &'static str); 12] = [
@@ -187,11 +185,12 @@ pub(crate) fn parse_60_event_names(ijs_events: &Vec<String>) -> Vec<Event> {
     event_names
 }
 
-pub fn parse_ijs(ijs_events: Vec<String>, settings: Settings) -> Vec<ResultSet> {
+pub fn parse_ijs(ijs_events: Vec<Event>) -> Vec<ResultSet> {
     let mut results = vec![];
 
-    for results_file_path in ijs_events {
-        let results_file_contents = fs::read_to_string(results_file_path).unwrap();
+    for event in ijs_events {
+        let results_file_contents = fs::read_to_string(event.file_path.clone()).unwrap();
+        let event_name = event.event_name.clone();
         let document = Html::parse_document(&results_file_contents);
         let selector = Selector::parse(r#"table > tbody > tr > td"#).unwrap();
 
@@ -223,26 +222,25 @@ pub fn parse_ijs(ijs_events: Vec<String>, settings: Settings) -> Vec<ResultSet> 
 
             let next_element = document_select_collection.get(element.0 + 1).unwrap();
             if next_element.has_class(&CssLocalName::from("name"), CaseSensitivity::CaseSensitive) {
-                result_set.club = Some(
-                    String::from(next_element.html()
-                        .split("<td class=\"name\">")
-                        .nth(1)
-                        .unwrap()
-                        .split("</td>")
-                        .nth(0)
-                        .unwrap()
-                        .split(", ")
-                        .nth(1)
-                        .unwrap_or(&String::from(""))
-                    )
-                );
+                let next_element_html = next_element.html();
+                let mut name_field_split = next_element_html
+                    .split("<td class=\"name\">")
+                    .nth(1)
+                    .unwrap()
+                    .split("</td>")
+                    .nth(0)
+                    .unwrap()
+                    .split(", ");
+                result_set.name = Some(String::from(name_field_split.nth(0).unwrap_or(&String::from(""))));
+                result_set.club = Some(String::from(name_field_split.nth(0).unwrap_or(&String::from(""))));
+                result_set.event = Some(event_name.clone());
             }
 
             results_for_event.push(result_set);
         }
 
         let participants = results_for_event.len() as u64;
-        for mut result in results_for_event.iter_mut() {
+        for result in results_for_event.iter_mut() {
             result.participants = Some(participants);
         }
 
@@ -252,10 +250,11 @@ pub fn parse_ijs(ijs_events: Vec<String>, settings: Settings) -> Vec<ResultSet> 
     results
 }
 
-pub fn parse_60(files_60: Vec<String>, settings: Settings) -> Vec<ResultSet> {
+pub fn parse_60(events_60: Vec<Event>) -> Vec<ResultSet> {
     let mut results = vec![];
-    for results_file_path in files_60 {
-        let results_file_contents = fs::read_to_string(results_file_path.clone()).unwrap();
+    for event in events_60 {
+        let results_file_contents = fs::read_to_string(event.file_path.clone()).unwrap();
+        let event_name = event.event_name.clone();
         let document = Html::parse_document(&results_file_contents);
         let selector = Selector::parse(r#"table > tbody > tr > td"#).unwrap();
 
@@ -268,41 +267,46 @@ pub fn parse_60(files_60: Vec<String>, settings: Settings) -> Vec<ResultSet> {
             let mut result_set = ResultSet::new(SixO);
 
             if element.1.html().contains("<td rowspan=\"1\" colspan=\"1\">") { // Name first this time because the name has more distinctive markings for it in the HTML.
-                let temp_club = String::from(element.1.html()
+                let next_element_html = element.1.html();
+                let mut name_field_split = next_element_html
                     .split("<td rowspan=\"1\" colspan=\"1\">")
                     .nth(1)
                     .unwrap()
                     .split("</td>").nth(0)
                     .unwrap()
-                    .split(", ")
-                    .nth(1)
-                    .unwrap()
-                );
+                    .split(", ");
+                let temp_name = String::from(name_field_split.nth(0).unwrap_or(""));
+                let temp_club = String::from(name_field_split.nth(0).unwrap_or(""));
 
                 if temp_club.contains("<br>") { // Handle duets and such by disregarding them. This is a terrible solution.
                     continue;
                 }
 
+                result_set.name = Some(temp_name);
                 result_set.club = Some(temp_club);
+                result_set.event = Some(event_name.clone());
 
                 has_name = true;
             } else if element.1.html().contains("<td colspan=\"1\" rowspan=\"1\">") { // Name first this time because the name has more distinctive markings for it in the HTML.
-                let temp_club = String::from(element.1.html()
+                let next_element_html = element.1.html();
+                let mut name_field_split = next_element_html
                     .split("<td colspan=\"1\" rowspan=\"1\">")
                     .nth(1)
                     .unwrap()
                     .split("</td>").nth(0)
                     .unwrap()
-                    .split(", ")
-                    .nth(1)
-                    .unwrap()
-                );
+                    .split(", ");
+
+                let temp_name = String::from(name_field_split.nth(0).unwrap_or(""));
+                let temp_club = String::from(name_field_split.nth(0).unwrap_or(""));
 
                 if temp_club.contains("<br>") { // Handle duets and such by disregarding them. This is a terrible solution.
                     continue;
                 }
 
+                result_set.name = Some(temp_name);
                 result_set.club = Some(temp_club);
+                result_set.event = Some(event_name.clone());
 
                 has_name = true;
             }
@@ -334,7 +338,7 @@ pub fn parse_60(files_60: Vec<String>, settings: Settings) -> Vec<ResultSet> {
         }
 
         let participants = results_for_event.len() as u64;
-        for mut result in results_for_event.iter_mut() {
+        for result in results_for_event.iter_mut() {
             result.participants = Some(participants);
         }
 

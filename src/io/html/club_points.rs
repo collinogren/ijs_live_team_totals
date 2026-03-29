@@ -56,7 +56,7 @@ impl ClubPoints {
     }
 }
 
-pub fn sum_results(results_sets: Vec<ResultSet>, settings: Settings) -> Vec<ClubPoints> {
+pub fn sum_results(results_sets: &Vec<ResultSet>, settings: Settings) -> Vec<ClubPoints> {
     let spreadsheet_scoring_system = if settings.use_scoring_system_spreadsheet {
         Some(read_scoring_system_spreadsheet(settings.scoring_system_file_name).unwrap())
     } else {
@@ -65,7 +65,7 @@ pub fn sum_results(results_sets: Vec<ResultSet>, settings: Settings) -> Vec<Club
 
     let mut club_points_vec: Vec<ClubPoints> = vec![];
 
-    for results_set in &results_sets {
+    for results_set in results_sets {
         let club = results_set.club.clone().unwrap();
         let mut club_exists = false;
         for club_points in &club_points_vec {
@@ -80,7 +80,7 @@ pub fn sum_results(results_sets: Vec<ResultSet>, settings: Settings) -> Vec<Club
         }
     }
 
-    for results_set in &results_sets {
+    for results_set in results_sets {
         for club in &mut club_points_vec {
             if results_set.club.clone().unwrap().eq(&club.club) {
                 if results_set.rank.clone().unwrap() <= settings.default_points_system.len() as u64 {

@@ -21,7 +21,7 @@ impl EventCheckbox {
         }
     }
 
-    pub fn view(&self) -> Element<EventToInclude> {
+    pub fn view<'a>(&'a self) -> Element<'a, EventToInclude> {
         let checkbox = checkbox("", self.event.active).on_toggle(EventToInclude::Edited);
 
         row![checkbox, text(&self.event.event_name).align_x(Alignment::Center).height(30)].align_y(Alignment::Center).into()

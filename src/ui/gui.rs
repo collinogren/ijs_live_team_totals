@@ -38,6 +38,7 @@ use crate::io::html::{event, parser};
 use crate::io::html::club_points::ClubPoints;
 use crate::io::html::event::Event;
 use crate::io::html::parser::State;
+use crate::io::html::result_set::ResultSet;
 use crate::io::html::results_sorter::sort_results;
 use crate::settings::settings::{Settings};
 use crate::ui::event_checkbox::{EventCheckbox, EventToInclude};
@@ -79,6 +80,8 @@ pub struct TeamTotalsGui {
     club_points_60_edits: Vec<ClubPointsField>,
     club_points_ijs_edits: Vec<ClubPointsField>,
 
+    result_sets: Vec<ResultSet>,
+
     selected_scoring_system_type: Option<ScoringSystemChoice>,
 }
 
@@ -92,16 +95,18 @@ pub enum TeamTotalsMessage {
     Attempt60ClubCorrection(bool),
     UseEventNameForResultsPath(bool),
     GenerateXLSX(bool),
+    GenerateXLSXInfoDump(bool),
     GenerateHTML(bool),
     XLSXFontSize(String),
     ISUCalcBaseDirectory(String),
     HTMLRelativeDirectory(String),
     XLSXFileName(String),
+    XLSXInfoDumpFileName(String),
     OutputDirectory(String),
     PointsForEachPlacement(usize, PointsForEachPlacement),
     EventInclusionChanged(usize, EventToInclude),
     EventsRetrieved((Vec<Event>, String)),
-    ResultsRetrieved((Vec<ClubPoints>, String)),
+    ResultsRetrieved((Vec<ClubPoints>, Vec<ResultSet>, String)),
 
     TabPressed { shift: bool },
     FindReceived(Option<PathBuf>),
@@ -187,8 +192,8 @@ fn retrieve_events(competition: String, settings: Settings) -> (Vec<Event>, Stri
     }
 }
 
-fn calculate(events: Vec<Event>, settings: &Settings, competition_name: &String) -> (Vec<ClubPoints>, String, State) {
-    let result = parser::parse_results(events, settings, competition_name);
+fn calculate(events: Vec<Event>, settings: &Settings) -> (Vec<ClubPoints>, Vec<ResultSet>, String, State) {
+    let result = parser::parse_results(events, settings);
     result
 }
 
@@ -249,6 +254,8 @@ impl TeamTotalsGui {
             club_name_edits: vec![],
             club_points_60_edits: vec![],
             club_points_ijs_edits: vec![],
+
+            result_sets: vec![],
 
             selected_scoring_system_type: Some(if settings.use_scoring_system_spreadsheet {
                 ScoringSystemChoice::Spreadsheet
@@ -341,6 +348,11 @@ impl TeamTotalsGui {
                 settings_changed = true;
                 Task::none()
             }
+            TeamTotalsMessage::GenerateXLSXInfoDump(generate_xlsx_info_dump) => {
+                self.settings.generate_xlsx_info_dump = generate_xlsx_info_dump;
+                settings_changed = true;
+                Task::none()
+            }
             TeamTotalsMessage::GenerateHTML(generate_html) => {
                 self.settings.generate_html = generate_html;
                 settings_changed = true;
@@ -370,6 +382,11 @@ impl TeamTotalsGui {
             }
             TeamTotalsMessage::XLSXFileName(xlsx_file_name) => {
                 self.settings.xlsx_file_name = xlsx_file_name;
+                settings_changed = true;
+                Task::none()
+            }
+            TeamTotalsMessage::XLSXInfoDumpFileName(xlsx_info_dump_file_name) => {
+                self.settings.xlsx_info_dump_file_name = xlsx_info_dump_file_name;
                 settings_changed = true;
                 Task::none()
             }
@@ -558,17 +575,17 @@ impl TeamTotalsGui {
             TeamTotalsMessage::CalculateResults => {
                 let events = self.events.clone();
                 let settings = self.settings.clone();
-                let competition_name = self.competition.clone();
 
                 Task::perform(async move {
-                    let (club_points, result, _status) = calculate(events, &settings, &competition_name);
-                    (club_points, result)
+                    let (club_points, result_sets, result, _status) = calculate(events, &settings);
+                    (club_points, result_sets, result)
                 }, TeamTotalsMessage::ResultsRetrieved)
             }
 
-            TeamTotalsMessage::ResultsRetrieved((club_points, status)) => {
+            TeamTotalsMessage::ResultsRetrieved((club_points, result_sets, status)) => {
                 self.status = status;
                 self.club_points = club_points;
+                self.result_sets = result_sets;
 
                 self.update_edit_inputs();
 
@@ -695,7 +712,7 @@ impl TeamTotalsGui {
             }
             TeamTotalsMessage::OutputResults => {
                 if self.club_points.len() > 0 {
-                    file_utils::output_files(&self.club_points, &self.settings, &self.competition);
+                    file_utils::output_files(&self.club_points, &self.result_sets, &self.settings, &self.competition);
                     self.status = String::from("Success! Press \"Open Output Directory...\" to view generated files");
                 } else {
                     self.status = String::from("No results available");
@@ -729,7 +746,7 @@ impl TeamTotalsGui {
         Task::batch(tasks)
     }
 
-    fn main_menu(&self) -> Element<TeamTotalsMessage> {
+    fn main_menu<'a>(&'a self) -> Element<'a, TeamTotalsMessage> {
         let competition_input = text_input(if self.settings.use_event_name_for_results_path {
             "Enter the name of the competition you wish to talley"
         } else {
@@ -771,7 +788,8 @@ impl TeamTotalsGui {
 
         let include_60_checkbox = Checkbox::new("Include 6.0", self.settings.include_60).on_toggle(TeamTotalsMessage::Include60);
         let include_ijs_checkbox = Checkbox::new("Include IJS", self.settings.include_ijs).on_toggle(TeamTotalsMessage::IncludeIJS);
-        let generate_xslx_checkbox = Checkbox::new("Generate .xlsx File", self.settings.generate_xlsx).on_toggle(TeamTotalsMessage::GenerateXLSX);
+        let generate_xlsx_checkbox = Checkbox::new("Generate .xlsx File", self.settings.generate_xlsx).on_toggle(TeamTotalsMessage::GenerateXLSX);
+        let generate_xlsx_info_dump_checkbox = Checkbox::new("Generate .xlsx Info Dump File", self.settings.generate_xlsx_info_dump).on_toggle(TeamTotalsMessage::GenerateXLSXInfoDump);
         let generate_html_checkbox = Checkbox::new("Generate .html File", self.settings.generate_html).on_toggle(TeamTotalsMessage::GenerateHTML);
         let attempt_60_club_correction_checkbox = Checkbox::new("Attempt 6.0 Club Correction", self.settings.attempt_automatic_60_club_name_recombination).on_toggle(TeamTotalsMessage::Attempt60ClubCorrection);
         let use_event_name_checkbox = Checkbox::new("Use Event Name for Results Path", self.settings.use_event_name_for_results_path).on_toggle(TeamTotalsMessage::UseEventNameForResultsPath);
@@ -788,12 +806,38 @@ impl TeamTotalsGui {
         let output_directory_column = column![text("Output Directory"), vertical_space().height(1), row![output_directory, output_directory_button], vertical_space().height(5)];
         let xlsx_file_name = text_input("", &self.settings.xlsx_file_name).on_input(TeamTotalsMessage::XLSXFileName);
         let xlsx_file_name_column = column![text("Excel File Name"), vertical_space().height(1), xlsx_file_name];
-        let mut column2: widget::Column<'_, TeamTotalsMessage> = column![ include_60_checkbox, vertical_space().height(10), include_ijs_checkbox, vertical_space().height(10), generate_xslx_checkbox, vertical_space().height(10), generate_html_checkbox, vertical_space().height(10), attempt_60_club_correction_checkbox, vertical_space().height(10), use_event_name_checkbox, vertical_space().height(10), font_size_column, vertical_space().height(10), isu_calc_base_directory_column, vertical_space().height(10), html_relative_directory_column, vertical_space().height(10),
-            output_directory_column,
-            vertical_space().height(10),
-            xlsx_file_name_column,
-            vertical_space().height(10),
-        ].padding(10);
+        let xlsx_info_dump_file_name = text_input("", &self.settings.xlsx_info_dump_file_name).on_input(TeamTotalsMessage::XLSXInfoDumpFileName);
+        let xlsx_info_dump_file_name_column = column![text("Excel Info Dump File Name"), vertical_space().height(1), xlsx_info_dump_file_name];
+        let mut column2: widget::Column<'_, TeamTotalsMessage> =
+            column!
+            [
+                include_60_checkbox,
+                vertical_space().height(10),
+                include_ijs_checkbox,
+                vertical_space().height(10),
+                generate_xlsx_checkbox,
+                vertical_space().height(10),
+                generate_xlsx_info_dump_checkbox,
+                vertical_space().height(10),
+                generate_html_checkbox,
+                vertical_space().height(10),
+                attempt_60_club_correction_checkbox,
+                vertical_space().height(10),
+                use_event_name_checkbox,
+                vertical_space().height(10),
+                font_size_column,
+                vertical_space().height(10),
+                isu_calc_base_directory_column,
+                vertical_space().height(10),
+                html_relative_directory_column,
+                vertical_space().height(10),
+                output_directory_column,
+                vertical_space().height(10),
+                xlsx_file_name_column,
+                vertical_space().height(10),
+                xlsx_info_dump_file_name_column,
+                vertical_space().height(10),
+            ].padding(10);
 
         let scoring_system_column: widget::Column<'_, TeamTotalsMessage> = column![
             radio("Use Single Scoring System", ScoringSystemChoice::Single, self.selected_scoring_system_type, TeamTotalsMessage::ScoringSystemSelected),
@@ -856,7 +900,7 @@ impl TeamTotalsGui {
     }
 
 
-    fn edit_menu(&self) -> Element<TeamTotalsMessage> {
+    fn edit_menu<'a>(&'a self) -> Element<'a, TeamTotalsMessage> {
         let main_button = Button::new(Text::new("Back").align_x(Alignment::Center)).on_press(TeamTotalsMessage::ToggleEditMode).width(140);
         let mut club_points_column: Column<'_, TeamTotalsMessage, Theme, Renderer> = Column::new();
         club_points_column = club_points_column.push(main_button);
@@ -925,7 +969,7 @@ impl TeamTotalsGui {
         container(club_points_column).center_x(iced::Length::Fill).align_y(Vertical::Top).height(iced::Length::Fill).into()
     }
 
-    pub fn view(&self) -> Element<TeamTotalsMessage> {
+    pub fn view<'a>(&'a self) -> Element<'a, TeamTotalsMessage> {
         match self.menu {
             Menu::MAIN => { self.main_menu() }
             Menu::EDIT => { self.edit_menu() }

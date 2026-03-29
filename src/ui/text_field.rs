@@ -11,7 +11,7 @@ pub trait TextField<T, E> {
     fn new(id: T, value: String, requested_width: Option<Length>) -> Self;
     fn text_input_id(id: T) -> text_input::Id;
 
-    fn view(&self, id: T) -> Element<E>;
+    fn view<'a>(&'a self, id: T) -> Element<'a, E>;
 }
 
 #[derive(Debug, Clone)]
@@ -34,7 +34,7 @@ impl TextField<usize, PointsForEachPlacement> for PointsField {
         text_input::Id::new(format!("{i}"))
     }
 
-    fn view(&self, index: usize) -> Element<PointsForEachPlacement> {
+    fn view<'a>(&'a self, index: usize) -> Element<'a, PointsForEachPlacement> {
         let mut points_field = text_input(
             format!("Points for position {}", index + 1).as_str(),
             &self.value,
@@ -80,7 +80,7 @@ impl TextField<usize, ClubPointsEdit> for ClubPointsField {
         text_input::Id::new(format!("{}", i))
     }
 
-    fn view(&self, index: usize) -> Element<ClubPointsEdit> {
+    fn view<'a>(&'a self, index: usize) -> Element<'a, ClubPointsEdit> {
         let mut points_field = text_input(
             "",
             &self.value,
