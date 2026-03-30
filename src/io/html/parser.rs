@@ -24,7 +24,7 @@ use std::{fs, thread};
 use std::sync::{Arc, mpsc};
 use scraper::{CaseSensitivity, Element, ElementRef, Html, Selector};
 use scraper::selector::CssLocalName;
-use crate::io::html::club_points::{auto_club_combiner, ClubPoints, sum_results};
+use crate::io::html::club_points::{ClubPoints, sum_results};
 use crate::io::html::event::Event;
 use crate::io::html::result_set::{clean_club_names, ResultSet};
 use crate::io::html::results_sorter;
@@ -36,11 +36,34 @@ pub enum State {
     Error,
 }
 
+// Parse results from a list of events according to the user's settings.
 pub fn parse_results(events: Vec<Event>, settings: &Settings) -> (Vec<ClubPoints>, Vec<ResultSet>, String, State) {
+    // Split the event list into IJS and 6.0 components.
+    let (events_ijs, events_60) = separate_events_by_scoring_system(&events);
+
+    // Get the results from each event.
+    let (results_ijs, results_60) = calculate_raw_results(events_ijs, events_60);
+
+    // Combine the results from IJS and 6.0 events.
+    let combined_raw_results = combine_raw_results(results_ijs, results_60);
+
+    // Sum the results for every club.
+    let mut results = sum_results(&combined_raw_results, settings.clone())
+        .iter()
+        .map(|(key, club_points)| club_points.clone())
+        .collect();
+
+    // Sort the results.
+    results_sorter::sort_results(&mut results);
+
+    (results, combined_raw_results, String::from("Results Successfully Calculated"), State::Ok)
+}
+
+fn separate_events_by_scoring_system(events: &Vec<Event>) -> (Arc<Vec<Event>>, Arc<Vec<Event>>) {
     let mut events_ijs = vec![];
     let mut events_60 = vec![];
 
-    for event in &events {
+    for event in events {
         if event.active {
             if event.scoring_system == IJS {
                 events_ijs.push(event.clone());
@@ -53,40 +76,43 @@ pub fn parse_results(events: Vec<Event>, settings: &Settings) -> (Vec<ClubPoints
     let events_ijs = Arc::new(events_ijs);
     let events_60 = Arc::new(events_60);
 
+    (events_ijs, events_60)
+}
+
+fn calculate_raw_results(events_ijs: Arc<Vec<Event>>, events_60: Arc<Vec<Event>>) -> (Vec<ResultSet>, Vec<ResultSet>) {
+    // Create senders and receivers to multithread the operations.
     let (results_ijs_sender, results_ijs_receiver) = mpsc::channel::<Vec<ResultSet>>();
 
+    // Use an Arc to atomically send data to a new thread and parse the IJS events asynchronously.
     let events_ijs_clone = events_ijs.clone();
     thread::spawn(move || {
         results_ijs_sender.send(parse_ijs(events_ijs_clone.to_vec())).unwrap();
     });
 
+    // Create senders and receivers to multithread the operations.
     let (results_60_sender, results_60_receiver) = mpsc::channel::<Vec<ResultSet>>();
 
+    // Use an Arc to atomically send data to a new thread and parse the 6.0 events asynchronously.
     let events_60_clone = events_60.clone();
     thread::spawn(move || {
         results_60_sender.send(parse_60(events_60_clone.to_vec())).unwrap();
     });
 
+    // Wait for the results from the worker threads.
     let results_ijs = results_ijs_receiver.recv().unwrap();
     let results_60 = results_60_receiver.recv().unwrap();
 
-    let number_results_60_found = format!("Retrieved {} IJS results and {} 6.0 results.", results_ijs.len(), results_60.len());
-    println!("{}", number_results_60_found);
+    (results_ijs, results_60)
+}
 
+// Combine both IJS and 6.0 result sets into one and clean up club names.
+fn combine_raw_results(results_ijs: Vec<ResultSet>, results_60: Vec<ResultSet>) -> Vec<ResultSet> {
     let mut combined_raw_results = results_ijs;
     combined_raw_results.extend(results_60);
 
     clean_club_names(&mut combined_raw_results);
 
-    let mut results = sum_results(&combined_raw_results, settings.clone());
-
-    if settings.attempt_automatic_60_club_name_recombination {
-        results = auto_club_combiner(results);
-    }
-
-    results_sorter::sort_results(&mut results);
-
-    (results, combined_raw_results, String::from("Results Successfully Calculated"), State::Ok)
+    combined_raw_results
 }
 
 pub(crate) const HTML_CHARACTER_ENTITIES: [(&'static str, &'static str); 12] = [
@@ -104,6 +130,7 @@ pub(crate) const HTML_CHARACTER_ENTITIES: [(&'static str, &'static str); 12] = [
     ("&reg;", "®")
 ];
 
+// Replace HTML character entities with the actual character they represent.
 pub(crate) fn clean_event_names(mut event_names: Vec<Event>) -> Vec<Event> {
     for event_name in &mut event_names {
         for character_entities in HTML_CHARACTER_ENTITIES {
@@ -115,6 +142,7 @@ pub(crate) fn clean_event_names(mut event_names: Vec<Event>) -> Vec<Event> {
     event_names
 }
 
+// Parse IJS events from a list of files.
 pub(crate) fn parse_ijs_event_names(ijs_events: &Vec<String>) -> Vec<Event> {
     let mut event_names = vec![];
 
@@ -149,6 +177,7 @@ pub(crate) fn parse_ijs_event_names(ijs_events: &Vec<String>) -> Vec<Event> {
     event_names
 }
 
+// Parse 6.0 events from a list of files.
 pub(crate) fn parse_60_event_names(ijs_events: &Vec<String>) -> Vec<Event> {
     let mut event_names = vec![];
     for results_file_path in ijs_events {
@@ -185,6 +214,7 @@ pub(crate) fn parse_60_event_names(ijs_events: &Vec<String>) -> Vec<Event> {
     event_names
 }
 
+// Parse IJS results from a list of events.
 pub fn parse_ijs(ijs_events: Vec<Event>) -> Vec<ResultSet> {
     let mut results = vec![];
 
@@ -250,6 +280,7 @@ pub fn parse_ijs(ijs_events: Vec<Event>) -> Vec<ResultSet> {
     results
 }
 
+// Parse 6.0 results from a list of events.
 pub fn parse_60(events_60: Vec<Event>) -> Vec<ResultSet> {
     let mut results = vec![];
     for event in events_60 {
