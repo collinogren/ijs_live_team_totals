@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use iced::widget::shader::wgpu::naga::FastHashMap;
 
 use crate::io::excel::scoring_system_reader::read_scoring_system_spreadsheet;
@@ -83,35 +84,63 @@ pub fn sum_results(results_sets: &Vec<ResultSet>, settings: Settings) -> FastHas
             None => continue,
         };
 
-        if results_set.rank.clone().unwrap() <= settings.default_points_system.len() as u64 {
+        if spreadsheet_scoring_system.is_some() ||
+            results_set.rank.clone().unwrap() <= settings.default_points_system.len() as u64 {
+
+            let rank = match results_set.rank.clone() {
+                Some(rank) => (rank - 1) as usize,
+                None => {
+                    eprintln!("Failed to get rank for at event {}, skater {}",
+                              results_set.event.clone().unwrap_or(String::from("Unknown")),
+                              results_set.name.clone().unwrap_or(String::from("Unknown")));
+                    continue
+                }
+            };
+
             match &spreadsheet_scoring_system {
                 Some(scoring_system) => {
+                    let participants = match results_set.participants {
+                        Some(participants) => participants,
+                        None => {
+                            eprintln!("Failed to get number of participants at event {}",
+                                      results_set.event.clone().unwrap_or(String::from("Unknown")));
+                            continue
+                        },
+                    };
+
+                    let scoring_system_for_n_participants = match scoring_system.get(&participants) {
+                        Some(scoring_system_for_n_participants) => scoring_system_for_n_participants,
+                        None => {
+                            eprintln!("Failed to get scoring system column at event {}",
+                                      results_set.event.clone().unwrap_or(String::from("Unknown")));
+                            continue
+                        },
+                    };
+
                     match results_set.scoring_system {
                         ScoringSystem::IJS => {
                             club.points_ijs.replace(
                                 club
                                     .points_ijs()
-                                    .unwrap_or(0.0) + scoring_system.get(&results_set.participants.unwrap())
-                                    .unwrap()
-                                    .get((results_set.rank.clone().unwrap() - 1) as usize)
-                                    .unwrap());
+                                    .unwrap_or(0.0) + scoring_system_for_n_participants
+                                    .get(rank)
+                                    .unwrap_or(&0.0));
                         }
 
                         ScoringSystem::SixO => {
                             club.points_60.replace(
                                 club
                                     .points_60()
-                                    .unwrap_or(0.0) + scoring_system.get(&results_set.participants.unwrap())
-                                    .unwrap()
-                                    .get((results_set.rank.clone().unwrap() - 1) as usize)
-                                    .unwrap());
+                                    .unwrap_or(0.0) + scoring_system_for_n_participants
+                                    .get(rank)
+                                    .unwrap_or(&0.0));
                         }
                     };
                 }
                 None => {
                     match results_set.scoring_system {
-                        ScoringSystem::IJS => { club.points_ijs.replace(club.points_ijs.unwrap_or(0.0) + settings.default_points_system[(results_set.rank.clone().unwrap() - 1) as usize]); }
-                        ScoringSystem::SixO => { club.points_60.replace(club.points_60().unwrap_or(0.0) + settings.default_points_system[(results_set.rank.clone().unwrap() - 1) as usize]); }
+                        ScoringSystem::IJS => { club.points_ijs.replace(club.points_ijs.unwrap_or(0.0) + settings.default_points_system[rank]); }
+                        ScoringSystem::SixO => { club.points_60.replace(club.points_60().unwrap_or(0.0) + settings.default_points_system[rank]); }
                     };
                 }
             }
@@ -125,7 +154,7 @@ pub fn sum_results(results_sets: &Vec<ResultSet>, settings: Settings) -> FastHas
     club_points_hashmap
 }
 
-pub fn auto_club_combiner_hashmap(mut club_points: &mut FastHashMap<String, ClubPoints>) {
+pub fn auto_club_combiner_hashmap(club_points: &mut FastHashMap<String, ClubPoints>) {
     let truncated_clubs: Vec<(String, ClubPoints)> = club_points
         .iter()
         .filter(|(key, _)| key.ends_with("..."))
@@ -144,22 +173,22 @@ pub fn auto_club_combiner_hashmap(mut club_points: &mut FastHashMap<String, Club
         let club_points_binding = club_points.clone();
         let club_to_combine = club_points_binding
             .iter()
-            .find(|(key, club_points)| key.starts_with(truncated_key));
+            .find(|(key, _)| key.starts_with(truncated_key));
 
         match club_to_combine {
             Some((key, _)) => {
                 match club_points.get_mut(key) {
                     Some(full_club_points) => {
-                        match full_club_points.points_ijs {
-                            Some(mut points_ijs) => {
-                                points_ijs += truncated_club.points_ijs.unwrap_or(0.0);
+                        match &mut full_club_points.points_ijs {
+                            Some(ref mut points_ijs) => {
+                                *points_ijs += truncated_club.points_ijs.unwrap_or(0.0);
                             }
                             None => {}
                         }
 
-                        match full_club_points.points_60 {
-                            Some(mut points_60) => {
-                                points_60 += truncated_club.points_60.unwrap_or(0.0);
+                        match &mut full_club_points.points_60 {
+                            Some(ref mut points_60) => {
+                                *points_60 += truncated_club.points_60.unwrap_or(0.0);
                             }
                             None => {}
                         }

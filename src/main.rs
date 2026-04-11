@@ -20,7 +20,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-#![windows_subsystem = "windows"]
+//#![windows_subsystem = "windows"]
 
 use iced::{window};
 use iced::window::icon;

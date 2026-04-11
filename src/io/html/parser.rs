@@ -50,7 +50,7 @@ pub fn parse_results(events: Vec<Event>, settings: &Settings) -> (Vec<ClubPoints
     // Sum the results for every club.
     let mut results = sum_results(&combined_raw_results, settings.clone())
         .iter()
-        .map(|(key, club_points)| club_points.clone())
+        .map(|(_, club_points)| club_points.clone())
         .collect();
 
     // Sort the results.

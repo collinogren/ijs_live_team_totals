@@ -112,12 +112,46 @@ pub fn create_xlsx_info_dump(raw_results: &Vec<ResultSet>, settings: Settings) {
     for (i, result) in raw_results.iter().enumerate() {
         let points = match &spreadsheet_scoring_system {
             Some(scoring_system) => {
-                scoring_system.get(&result.participants.unwrap()).unwrap().get((result.rank.clone().unwrap() - 1) as usize).unwrap()
+                let participants = match result.participants {
+                    Some(participants) => participants,
+                    None => {
+                        eprintln!("Failed to get number of participants at event {}",
+                                  result.event.clone().unwrap_or(String::from("Unknown")));
+                        continue
+                    },
+                };
+
+                let scoring_system_for_n_participants = match scoring_system.get(&participants) {
+                    Some(scoring_system) => scoring_system,
+                    None => {
+                        eprintln!("Failed to get scoring system column at event {}",
+                                  result.event.clone().unwrap_or(String::from("Unknown")));
+                        continue
+                    },
+                };
+
+                let rank = match result.rank.clone() {
+                    Some(rank) => rank - 1,
+                    None => {
+                        eprintln!("Failed to get rank for at event {}, skater {}",
+                                  result.event.clone().unwrap_or(String::from("Unknown")),
+                                  result.name.clone().unwrap_or(String::from("Unknown")));
+                        continue
+                    },
+                };
+
+                scoring_system_for_n_participants.get(rank as usize).unwrap_or_else(|| &0.0)
             }
             None => {
-                settings.default_points_system.get((result.rank.clone().unwrap() - 1) as usize).unwrap()
+                let rank = match result.rank.clone() {
+                    Some(rank) => rank - 1,
+                    None => continue,
+                };
+
+                settings.default_points_system.get(rank as usize).unwrap_or_else(|| &0.0)
             }
         };
+
         worksheet.write_with_format(i as u32 + 1, 0, result.event(), &text_format).expect(format!("Failed to write event name for {}", result.name()).as_str());
         worksheet.write_with_format(i as u32 + 1, 1, result.name(), &text_format).expect(format!("Failed to write skater name for {}", result.name()).as_str());
         worksheet.write_with_format(i as u32 + 1, 2, result.club(), &text_format).expect(format!("Failed to write club name for {}", result.club()).as_str());
